@@ -23,9 +23,29 @@ pub struct Metrics {
     pub acked_lsn: AtomicU64,
     pub inflight_items: AtomicU64,
     pub inflight_bytes: AtomicU64,
+    /// Unix microseconds of the last target commit (0 = none yet).
+    pub last_apply_unix_micros: AtomicU64,
     state: AtomicU64,
+    connection: AtomicU64,
     started: Option<Instant>,
 }
+
+/// State of the source replication connection as seen by the engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionState {
+    /// No stream opened yet, or the job is not running.
+    Disconnected,
+    Connected,
+    /// A transient failure is being retried with backoff.
+    Reconnecting,
+}
+
+const CONNECTIONS: [ConnectionState; 3] = [
+    ConnectionState::Disconnected,
+    ConnectionState::Connected,
+    ConnectionState::Reconnecting,
+];
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MetricsSnapshot {
@@ -49,6 +69,8 @@ pub struct MetricsSnapshot {
     pub inflight_items: u64,
     pub inflight_bytes: u64,
     pub rss_bytes: Option<u64>,
+    pub last_apply_unix_micros: Option<u64>,
+    pub connection: ConnectionState,
 }
 
 const STATES: [JobState; 7] = [
@@ -76,6 +98,23 @@ impl Metrics {
 
     pub fn state(&self) -> JobState {
         STATES[self.state.load(Ordering::Relaxed) as usize % STATES.len()]
+    }
+
+    pub fn set_connection(&self, c: ConnectionState) {
+        let idx = CONNECTIONS.iter().position(|x| *x == c).unwrap_or(0) as u64;
+        self.connection.store(idx, Ordering::Relaxed);
+    }
+
+    pub fn connection(&self) -> ConnectionState {
+        CONNECTIONS[self.connection.load(Ordering::Relaxed) as usize % CONNECTIONS.len()]
+    }
+
+    pub fn mark_applied_now(&self) {
+        let micros = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_micros() as u64)
+            .unwrap_or(0);
+        self.last_apply_unix_micros.store(micros, Ordering::Relaxed);
     }
 
     pub fn add(&self, counter: &AtomicU64, n: u64) {
@@ -110,6 +149,11 @@ impl Metrics {
             inflight_items: g(&self.inflight_items),
             inflight_bytes: g(&self.inflight_bytes),
             rss_bytes: process_rss_bytes(),
+            last_apply_unix_micros: match g(&self.last_apply_unix_micros) {
+                0 => None,
+                v => Some(v),
+            },
+            connection: self.connection(),
         }
     }
 }

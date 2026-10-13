@@ -78,20 +78,41 @@ sample() { # pid file
 }
 
 export SOURCE_URL TARGET_URL
+WAL_AT_START=$(psql -Atq "$ADMIN_URL" -c "SELECT pg_current_wal_lsn()")
 T0=$(date +%s.%N)
 "$BIN" --config "$CFG" --json bootstrap > "$LOG" 2>&1 &
 PID=$!
 sample $PID "$SAMPLES" snapshot &
 SAMPLER=$!
+# Optional writers during the snapshot (WRITERS_DURING_SNAPSHOT=n): the catch-up phase
+# between copy completion and STREAMING then has real work to do.
+SNAP_WRITERS=()
+for w in $(seq 1 "${WRITERS_DURING_SNAPSHOT:-0}"); do
+  ( while ! psql -Atq "$TARGET_URL" -c "SELECT state FROM pgsync.job WHERE job_id='bench'" 2>/dev/null | grep -q 'CATCHING_UP\|STREAMING'; do
+      psql -q "$ADMIN_URL" -c "UPDATE bench.items SET qty = qty + 1 WHERE id IN (SELECT ((random()*$ROWS)::int % $ROWS) + 1 FROM generate_series(1,20)); INSERT INTO bench.ledger (item_id, delta, note) SELECT ((random()*$ROWS)::int % $ROWS) + 1, 1, 'snap$w' FROM generate_series(1,30);" >/dev/null 2>&1 || true
+    done ) &
+  SNAP_WRITERS+=($!)
+done
+T_COPY=
+RETAINED_PEAK=0
 until psql -Atq "$TARGET_URL" -c "SELECT state FROM pgsync.job WHERE job_id='bench'" 2>/dev/null | grep -q STREAMING; do
   if ! kill -0 $PID 2>/dev/null; then echo "pgsync exited early; see $LOG" >&2; exit 1; fi
+  if [ -z "$T_COPY" ] && psql -Atq "$TARGET_URL" -c "SELECT state FROM pgsync.job WHERE job_id='bench'" 2>/dev/null | grep -q CATCHING_UP; then T_COPY=$(date +%s.%N); fi
+  R=$(psql -Atq "$ADMIN_URL" -c "SELECT coalesce(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn),0)::bigint FROM pg_replication_slots WHERE slot_name='slot_bench'" 2>/dev/null || echo 0)
+  [ "${R:-0}" -gt "$RETAINED_PEAK" ] 2>/dev/null && RETAINED_PEAK=$R
   sleep 0.5
 done
 T1=$(date +%s.%N)
+[ -z "$T_COPY" ] && T_COPY=$T1
+WAL_AT_STREAMING=$(psql -Atq "$ADMIN_URL" -c "SELECT pg_current_wal_lsn()")
+WAL_DURING_SNAPSHOT=$(psql -Atq "$ADMIN_URL" -c "SELECT pg_wal_lsn_diff('$WAL_AT_STREAMING', '$WAL_AT_START')::bigint")
+wait "${SNAP_WRITERS[@]}" 2>/dev/null || true
 kill $SAMPLER 2>/dev/null || true; wait $SAMPLER 2>/dev/null || true
 SNAP_SECS=$(echo "$T1 - $T0" | bc)
+COPY_SECS=$(echo "$T_COPY - $T0" | bc)
+CATCHUP_SECS=$(echo "$T1 - $T_COPY" | bc)
 COPIED=$(psql -Atq "$TARGET_URL" -c "SELECT sum(bytes_copied) FROM pgsync.table_sync WHERE job_id='bench'")
-echo "== snapshot: $SNAP_SECS s, $COPIED COPY bytes" >&2
+echo "== snapshot: copy $COPY_SECS s, catch-up $CATCHUP_SECS s, total $SNAP_SECS s, $COPIED COPY bytes, $WAL_DURING_SNAPSHOT WAL bytes generated, retained peak $RETAINED_PEAK" >&2
 
 echo "== CDC phase: $WRITERS writers for $CDC_SECONDS s" >&2
 sample $PID "$SAMPLES" cdc &
@@ -134,11 +155,14 @@ def stats(ph):
 print(json.dumps({
  "rows_per_table":$ROWS,"source_bytes_on_disk":$SRC_BYTES,"copy_bytes":$COPIED,
  "snapshot_seconds":$SNAP_SECS,"snapshot_mb_per_s":round($COPIED/1e6/$SNAP_SECS,1),
+ "copy_seconds":$COPY_SECS,"copy_mb_per_s":round($COPIED/1e6/max($COPY_SECS,0.001),1),"catchup_seconds_after_copy":$CATCHUP_SECS,
+ "writers_during_snapshot":${WRITERS_DURING_SNAPSHOT:-0},"wal_bytes_generated_during_snapshot":$WAL_DURING_SNAPSHOT,"retained_wal_peak_bytes":$RETAINED_PEAK,
  "cdc_seconds":$CDC_SECS,"cdc_txns_applied":$TXNS,"cdc_rows_applied":${ROWS_APPLIED:-0},"cdc_txns_per_s":round($TXNS/$CDC_SECS,1),
  "drain_lag_seconds_after_writers_stopped":$LAG_SECS,
  "snapshot":stats("snapshot"),"cdc":stats("cdc"),
  "consistent": "$SRC_HASH"=="$TGT_HASH" and "$SRC_HASH2"=="$TGT_HASH2",
  "machine": "$(uname -m) $(sysctl -n machdep.cpu.brand_string 2>/dev/null || grep -m1 'model name' /proc/cpuinfo | cut -d: -f2)", "ram_bytes": $(sysctl -n hw.memsize 2>/dev/null || grep MemTotal /proc/meminfo | awk '{print $2*1024}'),
+ "cores": $(sysctl -n hw.ncpu 2>/dev/null || nproc), "kernel": "$(uname -sr)", "disk_free_bytes": $(df -k . | awk 'NR==2 {print $4*1024}'),
  "pgsync_commit": "$(git rev-parse --short HEAD)", "source_pg": "$(psql -Atq "$ADMIN_URL" -c 'SHOW server_version')", "timestamp": "$STAMP"
 }, indent=2))
 PY

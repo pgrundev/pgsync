@@ -228,6 +228,7 @@ async fn applier_loop<K: ReplicationSink>(
                     progress.txn(&summary);
                     metrics.add(&metrics.txns_applied, 1);
                     metrics.add(&metrics.rows_applied, rows_in_txn);
+                    metrics.mark_applied_now();
                     metrics.set_lsn(&metrics.committed_lsn, cp.committed_lsn);
                     metrics.set_state(cp.state);
                 }
@@ -451,6 +452,7 @@ where
             }
             let (stream, wal_end) = streams.connect(&cp).await?;
             metrics.set_lsn(&metrics.server_wal_end, wal_end);
+            metrics.set_connection(crate::metrics::ConnectionState::Connected);
             info!(from = %cp.committed_lsn, acked = %cp.acked_lsn, server_wal_end = %wal_end, state = %cp.state, "replication stream opened");
             progress.streaming(cp.committed_lsn);
             let outcome = run_apply_loop(
@@ -469,8 +471,12 @@ where
         .await;
 
         match attempt {
-            Ok(cp) => return Ok(cp),
+            Ok(cp) => {
+                metrics.set_connection(crate::metrics::ConnectionState::Disconnected);
+                return Ok(cp);
+            }
             Err(e) if e.is_retryable() && !cancel.is_cancelled() => {
+                metrics.set_connection(crate::metrics::ConnectionState::Reconnecting);
                 let Some(delay) = backoff.next_delay() else {
                     error!(error = %e, "retry attempts exhausted");
                     return Err(e);
@@ -483,6 +489,7 @@ where
                 }
             }
             Err(e) => {
+                metrics.set_connection(crate::metrics::ConnectionState::Disconnected);
                 // Record the failure in the target when we can; never advance positions.
                 if let Ok(mut sink) = sinks.connect().await
                     && let Ok(Some(mut cp)) = sink.load_checkpoint(job_id).await

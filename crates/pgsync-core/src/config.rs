@@ -206,6 +206,10 @@ pub struct SafetyConfig {
     pub wal_retention_action: WalRetentionAction,
     #[serde(with = "duration_text")]
     pub monitor_interval: Duration,
+    /// How often the running job writes its runtime row (`pgsync.job_runtime`) to the
+    /// target, for `pgsync status` and external monitoring.
+    #[serde(with = "duration_text")]
+    pub heartbeat_interval: Duration,
 }
 
 impl Default for SafetyConfig {
@@ -219,6 +223,7 @@ impl Default for SafetyConfig {
             wal_retention_alarm_bytes: 1024 * 1024 * 1024,
             wal_retention_action: WalRetentionAction::Warn,
             monitor_interval: Duration::from_secs(30),
+            heartbeat_interval: Duration::from_secs(10),
         }
     }
 }
@@ -428,6 +433,9 @@ impl Config {
         }
         if s.monitor_interval.is_zero() {
             return bad("safety.monitor_interval must be positive".into());
+        }
+        if s.heartbeat_interval.is_zero() || s.heartbeat_interval > Duration::from_secs(300) {
+            return bad("safety.heartbeat_interval must be between 1ms and 5m".into());
         }
         Ok(())
     }

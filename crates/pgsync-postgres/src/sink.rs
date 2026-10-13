@@ -40,6 +40,33 @@ CREATE TABLE IF NOT EXISTS pgsync.job (
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS pgsync.job_runtime (
+    job_id            text PRIMARY KEY REFERENCES pgsync.job (job_id) ON DELETE CASCADE,
+    pid               integer NOT NULL,
+    hostname          text NOT NULL,
+    pgsync_version    text NOT NULL,
+    started_at        timestamptz NOT NULL,
+    updated_at        timestamptz NOT NULL,
+    stopped_at        timestamptz,
+    state             text NOT NULL,
+    connection        text NOT NULL,
+    source_version    text,
+    received_lsn      pg_lsn NOT NULL DEFAULT '0/0',
+    server_wal_end    pg_lsn NOT NULL DEFAULT '0/0',
+    committed_lsn     pg_lsn NOT NULL DEFAULT '0/0',
+    acked_lsn         pg_lsn NOT NULL DEFAULT '0/0',
+    apply_lag_bytes   bigint NOT NULL DEFAULT 0,
+    txns_applied      bigint NOT NULL DEFAULT 0,
+    rows_applied      bigint NOT NULL DEFAULT 0,
+    rows_copied       bigint NOT NULL DEFAULT 0,
+    bytes_copied      bigint NOT NULL DEFAULT 0,
+    bytes_received    bigint NOT NULL DEFAULT 0,
+    txns_per_s        double precision NOT NULL DEFAULT 0,
+    rows_per_s        double precision NOT NULL DEFAULT 0,
+    reconnects        bigint NOT NULL DEFAULT 0,
+    rss_bytes         bigint,
+    last_apply_at     timestamptz
+);
 CREATE TABLE IF NOT EXISTS pgsync.table_sync (
     job_id       text NOT NULL REFERENCES pgsync.job (job_id) ON DELETE CASCADE,
     schema_name  text NOT NULL,
@@ -762,6 +789,78 @@ pub async fn upsert_checkpoint(client: &PgClient, cp: &Checkpoint) -> Result<()>
         )
         .await
         .map_err(|e| from_pg("save checkpoint", e))?;
+    Ok(())
+}
+
+/// One heartbeat of the running process, written outside any data transaction.
+pub struct RuntimeRow<'a> {
+    pub job_id: &'a str,
+    pub started_at_unix: i64,
+    pub stopped: bool,
+    pub source_version: Option<&'a str>,
+    pub snapshot: &'a pgsync_core::metrics::MetricsSnapshot,
+    pub txns_per_s: f64,
+    pub rows_per_s: f64,
+}
+
+pub async fn upsert_runtime(client: &PgClient, r: &RuntimeRow<'_>) -> Result<()> {
+    let m = r.snapshot;
+    let hostname = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        })
+        .unwrap_or_default();
+    client
+        .execute(
+            "INSERT INTO pgsync.job_runtime (job_id, pid, hostname, pgsync_version, started_at, updated_at, stopped_at, \
+             state, connection, source_version, received_lsn, server_wal_end, committed_lsn, acked_lsn, apply_lag_bytes, \
+             txns_applied, rows_applied, rows_copied, bytes_copied, bytes_received, txns_per_s, rows_per_s, reconnects, \
+             rss_bytes, last_apply_at) \
+             VALUES ($1, $2, $3, $4, to_timestamp($5), now(), CASE WHEN $6 THEN now() END, $7, $8, $9, $10, $11, $12, $13, $14, \
+             $15, $16, $17, $18, $19, $20, $21, $22, $23, CASE WHEN $24::float8 > 0 THEN to_timestamp($24::float8 / 1e6) END) \
+             ON CONFLICT (job_id) DO UPDATE SET pid = EXCLUDED.pid, hostname = EXCLUDED.hostname, \
+             pgsync_version = EXCLUDED.pgsync_version, started_at = EXCLUDED.started_at, updated_at = now(), \
+             stopped_at = EXCLUDED.stopped_at, state = EXCLUDED.state, connection = EXCLUDED.connection, \
+             source_version = coalesce(EXCLUDED.source_version, pgsync.job_runtime.source_version), \
+             received_lsn = EXCLUDED.received_lsn, server_wal_end = EXCLUDED.server_wal_end, \
+             committed_lsn = EXCLUDED.committed_lsn, acked_lsn = EXCLUDED.acked_lsn, apply_lag_bytes = EXCLUDED.apply_lag_bytes, \
+             txns_applied = EXCLUDED.txns_applied, rows_applied = EXCLUDED.rows_applied, rows_copied = EXCLUDED.rows_copied, \
+             bytes_copied = EXCLUDED.bytes_copied, bytes_received = EXCLUDED.bytes_received, txns_per_s = EXCLUDED.txns_per_s, \
+             rows_per_s = EXCLUDED.rows_per_s, reconnects = EXCLUDED.reconnects, rss_bytes = EXCLUDED.rss_bytes, \
+             last_apply_at = coalesce(EXCLUDED.last_apply_at, pgsync.job_runtime.last_apply_at)",
+            &[
+                &r.job_id,
+                &(std::process::id() as i32),
+                &hostname,
+                &env!("CARGO_PKG_VERSION"),
+                &(r.started_at_unix as f64),
+                &r.stopped,
+                &m.state.as_str(),
+                &format!("{:?}", m.connection).to_lowercase(),
+                &r.source_version,
+                &PgLsn::from(m.last_received_lsn.0),
+                &PgLsn::from(m.server_wal_end.0),
+                &PgLsn::from(m.committed_lsn.0),
+                &PgLsn::from(m.acked_lsn.0),
+                &(m.apply_lag_bytes as i64),
+                &(m.txns_applied as i64),
+                &(m.rows_applied as i64),
+                &(m.rows_copied as i64),
+                &(m.bytes_copied as i64),
+                &(m.bytes_received as i64),
+                &r.txns_per_s,
+                &r.rows_per_s,
+                &(m.reconnects as i64),
+                &m.rss_bytes.map(|b| b as i64),
+                &(m.last_apply_unix_micros.unwrap_or(0) as f64),
+            ],
+        )
+        .await
+        .map_err(|e| from_pg("write runtime row", e))?;
     Ok(())
 }
 

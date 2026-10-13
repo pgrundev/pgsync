@@ -18,6 +18,7 @@ use pgsync_core::metrics::Metrics;
 use pgsync_core::state::JobState;
 use pgsync_core::traits::SinkFactory;
 use pgsync_core::{Error, ErrorKind, Lsn, Result};
+use postgres_types::PgLsn;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -34,6 +35,8 @@ pub struct JobContext {
     pub metrics: Arc<Metrics>,
     pub cancel: CancellationToken,
     pub progress: pgsync_core::progress::ProgressHandle,
+    /// Source `version()` once known (preflight or stream open), for the heartbeat row.
+    pub source_version: Arc<Mutex<Option<String>>>,
 }
 
 impl JobContext {
@@ -47,6 +50,7 @@ impl JobContext {
             metrics: Arc::new(Metrics::new()),
             cancel,
             progress: pgsync_core::progress::none(),
+            source_version: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -145,6 +149,7 @@ pub async fn check(
         ctx.config.resources.feedback_interval,
     )
     .await?;
+    *ctx.source_version.lock().unwrap() = Some(pre.server.version.clone());
     // Replication protocol connectivity (pg_hba, REPLICATION attribute in practice).
     match ReplicationConnection::connect(&ctx.source, &ctx.config.safety, ctx.timeout()).await {
         Ok(mut conn) => match identify_system(&mut conn).await {
@@ -428,7 +433,11 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     sink::upsert_checkpoint(&tgt, &cp).await?;
     ctx.metrics.set_state(JobState::Snapshotting);
 
+    let hb_cancel = ctx.cancel.child_token();
+    let reporter = spawn_reporter(ctx, hb_cancel.clone());
     let snapshot_result = run_snapshot(ctx, &tgt, &pre, &created.snapshot_name).await;
+    hb_cancel.cancel();
+    let _ = reporter.await;
     // The exported snapshot is no longer needed once the copies have committed (or failed).
     repl.close().await;
     match snapshot_result {
@@ -698,7 +707,13 @@ pub async fn run(ctx: &JobContext) -> Result<Checkpoint> {
         ctx.cancel.clone(),
         monitor_reason.clone(),
     ));
-    let reporter = tokio::spawn(report_task(ctx.metrics.clone(), monitor_cancel.clone()));
+    let reporter = spawn_reporter(ctx, monitor_cancel.clone());
+    if ctx.source_version.lock().unwrap().is_none()
+        && let Ok(src) = ctx.source_client("pgsync-run").await
+        && let Ok(info) = source::server_info(&src).await
+    {
+        *ctx.source_version.lock().unwrap() = Some(info.version);
+    }
 
     let result = run_replication(
         &cfg.job.id,
@@ -853,13 +868,67 @@ async fn monitor_task(
     }
 }
 
-async fn report_task(metrics: Arc<Metrics>, cancel: CancellationToken) {
+/// Periodic status line in the log plus the `pgsync.job_runtime` heartbeat row on the
+/// target (its own connection, best effort, reconnects on failure). On cancellation a final
+/// row with `stopped_at` is written.
+async fn report_task(
+    target: ConnectionInfo,
+    safety: pgsync_core::config::SafetyConfig,
+    timeout: Duration,
+    job_id: String,
+    source_version: Arc<Mutex<Option<String>>>,
+    interval: Duration,
+    metrics: Arc<Metrics>,
+    cancel: CancellationToken,
+) {
+    let started_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let mut client: Option<PgClient> = None;
+    let mut last = (Instant::now(), 0u64, 0u64);
+    let mut last_log = Instant::now();
+    let mut stopping = false;
     loop {
-        tokio::select! {
-            _ = cancel.cancelled() => return,
-            _ = tokio::time::sleep(Duration::from_secs(30)) => {}
+        if !stopping {
+            tokio::select! {
+                _ = cancel.cancelled() => stopping = true,
+                _ = tokio::time::sleep(interval) => {}
+            }
         }
         let s = metrics.snapshot();
+        let elapsed = last.0.elapsed().as_secs_f64().max(0.001);
+        let txns_per_s = (s.txns_applied.saturating_sub(last.1)) as f64 / elapsed;
+        let rows_per_s = (s.rows_applied.saturating_sub(last.2)) as f64 / elapsed;
+        last = (Instant::now(), s.txns_applied, s.rows_applied);
+        if client.is_none() {
+            client = client::connect(&target, &safety, timeout, "pgsync-heartbeat")
+                .await
+                .ok();
+        }
+        if let Some(c) = &client {
+            let sv = source_version.lock().unwrap().clone();
+            let row = sink::RuntimeRow {
+                job_id: &job_id,
+                started_at_unix,
+                stopped: stopping,
+                source_version: sv.as_deref(),
+                snapshot: &s,
+                txns_per_s,
+                rows_per_s,
+            };
+            if let Err(e) = sink::upsert_runtime(c, &row).await {
+                warn!(error = %e, "heartbeat: cannot write pgsync.job_runtime");
+                client = None;
+            }
+        }
+        if stopping {
+            return;
+        }
+        if last_log.elapsed() < Duration::from_secs(30) {
+            continue;
+        }
+        last_log = Instant::now();
         info!(
             state = %s.state,
             txns_applied = s.txns_applied,
@@ -872,9 +941,24 @@ async fn report_task(metrics: Arc<Metrics>, cancel: CancellationToken) {
             inflight_items = s.inflight_items,
             rss_mb = s.rss_bytes.map(|b| b / (1024 * 1024)),
             reconnects = s.reconnects,
+            connection = ?s.connection,
             "status"
         );
     }
+}
+
+/// Start the heartbeat/report task for a `bootstrap` or `run`.
+fn spawn_reporter(ctx: &JobContext, cancel: CancellationToken) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(report_task(
+        ctx.target.clone(),
+        ctx.config.safety.clone(),
+        ctx.timeout(),
+        ctx.config.job.id.clone(),
+        ctx.source_version.clone(),
+        ctx.config.safety.heartbeat_interval,
+        ctx.metrics.clone(),
+        cancel,
+    ))
 }
 
 // ---- status / cleanup ----------------------------------------------------------------
@@ -882,11 +966,64 @@ async fn report_task(metrics: Arc<Metrics>, cancel: CancellationToken) {
 #[derive(Serialize)]
 pub struct StatusOutput {
     pub job: Option<Checkpoint>,
+    /// Last heartbeat of the process running this job, if any was ever written.
+    pub runtime: Option<RuntimeStatus>,
+    pub source: Option<SourceStatus>,
     pub slot: Option<crate::replication::slot::SlotInfo>,
     pub source_wal_lsn: Option<Lsn>,
     pub slot_lag_bytes: Option<u64>,
     pub retained_wal_bytes: Option<u64>,
+    /// Seconds between now and the commit time of the last applied source transaction.
+    pub seconds_since_last_commit: Option<f64>,
+    pub snapshot: SnapshotStatus,
     pub tables: Vec<TableSyncRow>,
+    pub resync_required: bool,
+    /// Operator action, when one is needed.
+    pub action: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SourceStatus {
+    pub version: Option<String>,
+    pub system_id: String,
+    pub dbname: String,
+}
+
+#[derive(Serialize)]
+pub struct SnapshotStatus {
+    pub tables_total: usize,
+    pub tables_copied: usize,
+    pub rows_copied: i64,
+    pub bytes_copied: i64,
+}
+
+#[derive(Serialize)]
+pub struct RuntimeStatus {
+    pub pid: i32,
+    pub hostname: String,
+    pub pgsync_version: String,
+    pub started_at: String,
+    pub updated_at: String,
+    pub stopped_at: Option<String>,
+    /// Seconds since the heartbeat row was last written.
+    pub age_seconds: f64,
+    /// True when the row is older than three heartbeat intervals and the process did not
+    /// record a clean stop: the process is probably gone.
+    pub stale: bool,
+    pub state: String,
+    pub connection: String,
+    pub received_lsn: Lsn,
+    pub server_wal_end: Lsn,
+    pub committed_lsn: Lsn,
+    pub acked_lsn: Lsn,
+    pub apply_lag_bytes: i64,
+    pub txns_applied: i64,
+    pub rows_applied: i64,
+    pub txns_per_s: f64,
+    pub rows_per_s: f64,
+    pub reconnects: i64,
+    pub rss_bytes: Option<i64>,
+    pub last_apply_at: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -919,16 +1056,81 @@ pub async fn status(ctx: &JobContext) -> Result<StatusOutput> {
             bytes_copied: r.get(3),
         })
         .collect();
-    let (slot, source_wal_lsn) = match ctx.source_client("pgsync-status").await {
-        Ok(src) => (
-            source::slot_info(&src, &ctx.config.source.slot).await?,
-            Some(source::current_wal_lsn(&src).await?),
-        ),
+    let runtime = s
+        .client()
+        .query_opt(
+            "SELECT pid, hostname, pgsync_version, started_at::text, updated_at::text, stopped_at::text, \
+             extract(epoch from now() - updated_at)::float8, state, connection, received_lsn, server_wal_end, \
+             committed_lsn, acked_lsn, apply_lag_bytes, txns_applied, rows_applied, txns_per_s, rows_per_s, \
+             reconnects, rss_bytes, last_apply_at::text, source_version \
+             FROM pgsync.job_runtime WHERE job_id = $1",
+            &[&ctx.config.job.id],
+        )
+        .await
+        .map_err(|e| from_pg("job_runtime", e))?;
+    let stale_after = ctx.config.safety.heartbeat_interval.as_secs_f64() * 3.0;
+    let mut source_version: Option<String> = None;
+    let runtime = runtime.map(|r| {
+        let age: f64 = r.get(6);
+        let stopped: Option<String> = r.get(5);
+        source_version = r.get(21);
+        let lsn = |i: usize| Lsn(u64::from(r.get::<_, PgLsn>(i)));
+        RuntimeStatus {
+            pid: r.get(0),
+            hostname: r.get(1),
+            pgsync_version: r.get(2),
+            started_at: r.get(3),
+            updated_at: r.get(4),
+            stale: stopped.is_none() && age > stale_after,
+            stopped_at: stopped,
+            age_seconds: age,
+            state: r.get(7),
+            connection: r.get(8),
+            received_lsn: lsn(9),
+            server_wal_end: lsn(10),
+            committed_lsn: lsn(11),
+            acked_lsn: lsn(12),
+            apply_lag_bytes: r.get(13),
+            txns_applied: r.get(14),
+            rows_applied: r.get(15),
+            txns_per_s: r.get(16),
+            rows_per_s: r.get(17),
+            reconnects: r.get(18),
+            rss_bytes: r.get(19),
+            last_apply_at: r.get(20),
+        }
+    });
+    let (slot, source_wal_lsn, live_version) = match ctx.source_client("pgsync-status").await {
+        Ok(src) => {
+            let v = src
+                .query_one("SELECT version()", &[])
+                .await
+                .ok()
+                .map(|r| r.get::<_, String>(0));
+            (
+                source::slot_info(&src, &ctx.config.source.slot).await?,
+                Some(source::current_wal_lsn(&src).await?),
+                v,
+            )
+        }
         Err(e) => {
             warn!(error = %e, "source unreachable");
-            (None, None)
+            (None, None, None)
         }
     };
+    let source = job.as_ref().map(|j| SourceStatus {
+        version: live_version.or(source_version),
+        system_id: j.source_system_id.clone(),
+        dbname: j.source_dbname.clone(),
+    });
+    let seconds_since_last_commit = job.as_ref().and_then(|j| j.last_commit_ts).map(|ts| {
+        let unix_micros = pgsync_core::event::pg_micros_to_unix_micros(ts);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_micros() as i64)
+            .unwrap_or(0);
+        (now - unix_micros) as f64 / 1e6
+    });
     let slot_lag_bytes = match (&slot, source_wal_lsn) {
         (Some(s), Some(cur)) => s.confirmed_flush_lsn.map(|l| cur.bytes_since(l)),
         _ => None,
@@ -937,13 +1139,49 @@ pub async fn status(ctx: &JobContext) -> Result<StatusOutput> {
         (Some(s), Some(cur)) => s.restart_lsn.map(|l| cur.bytes_since(l)),
         _ => None,
     };
+    let tables: Vec<TableSyncRow> = tables;
+    let snapshot = SnapshotStatus {
+        tables_total: ctx.config.replication.tables.len(),
+        tables_copied: tables.iter().filter(|t| t.state == "COPIED").count(),
+        rows_copied: tables.iter().map(|t| t.rows_copied).sum(),
+        bytes_copied: tables.iter().map(|t| t.bytes_copied).sum(),
+    };
+    let resync_required = job
+        .as_ref()
+        .map(|j| j.state == JobState::ResyncRequired)
+        .unwrap_or(false)
+        || slot
+            .as_ref()
+            .map(|s| s.wal_status.as_deref() == Some("lost") || s.invalidation_reason.is_some())
+            .unwrap_or(false)
+        || (job.is_some() && slot.is_none() && source_wal_lsn.is_some());
+    let action = match (&job, resync_required) {
+        (None, _) => Some("run `pgsync bootstrap`".to_owned()),
+        (Some(_), true) => Some("run `pgsync cleanup --yes` then `pgsync bootstrap`".to_owned()),
+        (Some(j), false) => match j.state {
+            JobState::Snapshotting | JobState::Initializing => {
+                Some("snapshot incomplete: run `pgsync bootstrap --restart-snapshot`".to_owned())
+            }
+            JobState::Error => Some("fix the cause in last_error, then `pgsync run`".to_owned()),
+            JobState::Paused => {
+                Some("resume with `pgsync run` (WAL is still retained by the slot)".to_owned())
+            }
+            _ => None,
+        },
+    };
     Ok(StatusOutput {
         job,
+        runtime,
+        source,
         slot,
         source_wal_lsn,
         slot_lag_bytes,
         retained_wal_bytes,
+        seconds_since_last_commit,
+        snapshot,
         tables,
+        resync_required,
+        action,
     })
 }
 

@@ -2,8 +2,8 @@
 
 use anyhow::{Context, bail};
 use clap::{Parser, Subcommand};
+use pgsync_core::ErrorKind;
 use pgsync_core::config::Config;
-use pgsync_core::{ErrorKind, JobState};
 use pgsync_postgres::job::{self, JobContext};
 use pgsync_postgres::source::{CheckStatus, PreflightMode};
 use std::path::PathBuf;
@@ -203,15 +203,68 @@ async fn real_main(cli: Cli, pretty: bool) -> anyhow::Result<()> {
                         println!("  committed lsn   {}", j.committed_lsn);
                         println!("  acked lsn       {}", j.acked_lsn);
                         println!("  txns applied    {}", j.txns_applied);
+                        if let Some(s) = out.seconds_since_last_commit {
+                            println!("  last commit     {s:.0}s ago (source commit time)");
+                        }
                         if let Some(e) = &j.last_error {
                             println!("  last error      {e}");
                         }
-                        if j.state == JobState::ResyncRequired {
-                            println!(
-                                "  action          run `pgsync cleanup --yes` then `pgsync bootstrap`"
-                            );
+                    }
+                }
+                if let Some(src) = &out.source {
+                    if let Some(v) = &src.version {
+                        println!("source: {}", v.split(" on ").next().unwrap_or(v));
+                    }
+                }
+                match &out.runtime {
+                    None => println!("process: no heartbeat recorded"),
+                    Some(r) => {
+                        let liveness = if r.stopped_at.is_some() {
+                            format!("stopped at {}", r.stopped_at.as_deref().unwrap_or(""))
+                        } else if r.stale {
+                            format!(
+                                "STALE (no heartbeat for {:.0}s; process probably gone)",
+                                r.age_seconds
+                            )
+                        } else {
+                            format!("alive ({:.0}s ago)", r.age_seconds)
+                        };
+                        println!(
+                            "process: pid {} on {} · pgsync {} · {}",
+                            r.pid, r.hostname, r.pgsync_version, liveness
+                        );
+                        println!(
+                            "  connection      {}  received {}  server wal end {}  apply lag {} bytes",
+                            r.connection, r.received_lsn, r.server_wal_end, r.apply_lag_bytes
+                        );
+                        println!(
+                            "  throughput      {:.1} txn/s  {:.0} rows/s  (txns {} rows {} reconnects {})",
+                            r.txns_per_s,
+                            r.rows_per_s,
+                            r.txns_applied,
+                            r.rows_applied,
+                            r.reconnects
+                        );
+                        println!(
+                            "  memory          {}",
+                            r.rss_bytes
+                                .map(|b| format!("{:.1} MB rss", b as f64 / 1048576.0))
+                                .unwrap_or_else(|| "n/a".into())
+                        );
+                        if let Some(t) = &r.last_apply_at {
+                            println!("  last apply      {t}");
                         }
                     }
+                }
+                println!(
+                    "snapshot: {}/{} tables copied, {} rows, {} bytes",
+                    out.snapshot.tables_copied,
+                    out.snapshot.tables_total,
+                    out.snapshot.rows_copied,
+                    out.snapshot.bytes_copied
+                );
+                if let Some(a) = &out.action {
+                    println!("action: {a}");
                 }
                 match &out.slot {
                     None => println!("slot: missing on source"),

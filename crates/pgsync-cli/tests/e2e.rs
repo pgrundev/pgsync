@@ -492,6 +492,43 @@ async fn status_and_cleanup_commands() {
     let (code, out) = job.run(&["--json", "status"]);
     assert_eq!(code, 0);
     assert!(out.contains("\"state\": \"STREAMING\""), "{out}");
+    // Runtime heartbeat written by the running process (heartbeat_interval is 10 s by
+    // default; the first row is written after one interval).
+    mixed_dml(&job, 1).await;
+    job.wait_converged(ACCOUNTS_TABLES, T).await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let json = loop {
+        let (_, out) = job.run(&["--json", "status"]);
+        let v: serde_json::Value = serde_json::from_str(&out).expect("status json");
+        if v["runtime"].is_object() && v["runtime"]["txns_applied"].as_i64().unwrap_or(0) >= 1 {
+            break v;
+        }
+        assert!(std::time::Instant::now() < deadline, "no heartbeat: {out}");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    };
+    let rt = &json["runtime"];
+    assert_eq!(rt["connection"], "connected");
+    assert_eq!(rt["stale"], false);
+    assert_eq!(rt["state"], "STREAMING");
+    assert!(rt["rss_bytes"].as_i64().unwrap() > 0);
+    assert!(rt["pid"].as_i64().unwrap() > 0);
+    assert!(rt["last_apply_at"].is_string());
+    assert!(
+        json["source"]["version"]
+            .as_str()
+            .unwrap()
+            .starts_with("PostgreSQL")
+    );
+    assert_eq!(json["snapshot"]["tables_copied"], 2);
+    assert_eq!(json["resync_required"], false);
+    assert!(json["action"].is_null());
+    assert!(json["seconds_since_last_commit"].as_f64().unwrap() >= 0.0);
+    assert!(json["slot_lag_bytes"].is_number() && json["retained_wal_bytes"].is_number());
+    let (_, text) = job.run(&["status"]);
+    assert!(
+        text.contains("process: pid") && text.contains("alive"),
+        "{text}"
+    );
     let (code, _) = job.run(&["cleanup"]);
     assert_ne!(code, 0, "cleanup without --yes must refuse");
     assert!(job.slot_exists().await);
@@ -501,6 +538,13 @@ async fn status_and_cleanup_commands() {
         "cleanup must refuse while the slot is active: {out}"
     );
     assert_eq!(p.terminate(), 0);
+    let (_, out) = job.run(&["--json", "status"]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(
+        v["runtime"]["stopped_at"].is_string(),
+        "clean stop recorded: {out}"
+    );
+    assert_eq!(v["runtime"]["connection"], "disconnected");
     let (code, out) = job.run(&["cleanup", "--yes"]);
     assert_eq!(code, 0, "{out}");
     assert!(!job.slot_exists().await);
