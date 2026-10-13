@@ -30,9 +30,14 @@ pub trait EventStream: Send {
 /// Produces streams; called again after a transient failure.
 pub trait StreamFactory: Send {
     type Stream: EventStream;
-    /// Open a stream starting at `from` (the server may start later, at its confirmed
-    /// flush position). Returns the stream and the server's current WAL end.
-    fn connect(&mut self, from: Lsn) -> impl Future<Output = Result<(Self::Stream, Lsn)>> + Send;
+    /// Open a stream resuming from `cp.committed_lsn` (the server may start later, at its
+    /// confirmed flush position). Implementations verify source identity and slot
+    /// continuity against `cp` and fail with `ResyncRequired` when continuity cannot be
+    /// proven. Returns the stream and the server's current WAL end.
+    fn connect(
+        &mut self,
+        cp: &Checkpoint,
+    ) -> impl Future<Output = Result<(Self::Stream, Lsn)>> + Send;
 }
 
 /// Applies transactions to a destination and persists checkpoints with them.

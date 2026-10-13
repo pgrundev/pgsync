@@ -280,6 +280,12 @@ async fn reader_task<S: EventStream>(
             SourceEvent::Keepalive { wal_end } => {
                 last_received = last_received.max(*wal_end);
                 metrics.set_lsn(&metrics.server_wal_end, *wal_end);
+                // Answer keepalives promptly (the server may have requested a reply) with
+                // the last durable position.
+                stream
+                    .send_feedback(feedback(&ack_rx, last_received, false))
+                    .await?;
+                metrics.add(&metrics.feedback_sent, 1);
             }
             _ => {}
         }
@@ -348,7 +354,7 @@ where
                 cp.state = JobState::CatchingUp;
                 cp.last_error = None;
             }
-            let (stream, wal_end) = streams.connect(cp.committed_lsn).await?;
+            let (stream, wal_end) = streams.connect(&cp).await?;
             metrics.set_lsn(&metrics.server_wal_end, wal_end);
             info!(from = %cp.committed_lsn, acked = %cp.acked_lsn, server_wal_end = %wal_end, state = %cp.state, "replication stream opened");
             let outcome = run_apply_loop(stream, sink, cp, wal_end, resources, metrics.clone(), cancel.clone()).await?;
@@ -838,8 +844,8 @@ mod tests {
     }
     impl StreamFactory for ScriptedStreams {
         type Stream = FakeStream;
-        async fn connect(&mut self, from: Lsn) -> Result<(FakeStream, Lsn)> {
-            self.connects.push(from);
+        async fn connect(&mut self, cp: &Checkpoint) -> Result<(FakeStream, Lsn)> {
+            self.connects.push(cp.committed_lsn);
             let script = self
                 .rounds
                 .pop_front()

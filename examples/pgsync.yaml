@@ -1,0 +1,52 @@
+# PGSync job configuration for the Docker Compose development environment.
+#
+#   export PGSYNC_SOURCE_URL='postgres://pgsync:pgsync@localhost:5433/app'
+#   export PGSYNC_TARGET_URL='postgres://postgres:postgres@localhost:5434/app'
+#   pgsync --config examples/pgsync.yaml check
+
+job:
+  id: demo-replication
+
+source:
+  url_env: PGSYNC_SOURCE_URL
+  publication: pgsync_demo        # must already exist (see docker/source-init/03-publication.sql)
+  slot: pgsync_demo_slot          # created by `pgsync bootstrap`, owned by this job
+
+target:
+  url_env: PGSYNC_TARGET_URL
+
+replication:
+  mode: snapshot_and_cdc          # or cdc_only (target already consistent at the slot's point)
+  tables:
+    - public.users
+    - public.orders
+
+schema:
+  mode: pg_dump                   # pg_dump --schema-only for the tables above; or `existing`
+
+resources:
+  memory_budget_mb: 128
+  buffer_size_kb: 256
+  max_inflight_bytes: 16777216    # reader -> applier channel byte budget
+  channel_capacity: 4096
+  max_batch_rows: 500
+  max_batch_bytes: 4194304
+  max_parallel_copies: 2
+  connection_timeout: 10s
+  retry_backoff:
+    initial: 1s
+    max: 30s
+    multiplier: 2.0
+    max_attempts: 0               # 0 = retry transient failures forever
+  snapshot_timeout: 6h
+  feedback_interval: 10s
+  max_replication_lag_bytes: 1073741824
+
+safety:
+  require_tls: true               # enforced for non-loopback hosts; localhost may be plain
+  insecure_skip_tls_verify: false # honoured for loopback hosts only
+  auto_create_publication: false
+  auto_drop_slot: false
+  wal_retention_alarm_bytes: 1073741824
+  wal_retention_action: warn      # or `stop`
+  monitor_interval: 30s

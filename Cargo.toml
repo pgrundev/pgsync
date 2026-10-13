@@ -42,6 +42,8 @@ url = "2.5"
 rand = "0.9"
 sha2 = "0.10"
 hex = "0.4"
+fallible-iterator = "0.2"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
 
 [profile.release]
 debug = 1

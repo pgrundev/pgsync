@@ -24,6 +24,8 @@ pub enum ErrorKind {
     /// Memory or resource budget exceeded. Stop without acknowledging; may be recoverable
     /// after raising limits.
     Resource,
+    /// Source and target have diverged (e.g. an UPDATE matched no row). Stop.
+    Consistency,
     /// Protocol violation or internal invariant failure. Stop.
     Internal,
     /// Operation cancelled by shutdown request.
@@ -45,6 +47,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::Unsupported => "unsupported",
             ErrorKind::ResyncRequired => "resync_required",
             ErrorKind::Resource => "resource",
+            ErrorKind::Consistency => "consistency",
             ErrorKind::Internal => "internal",
             ErrorKind::Cancelled => "cancelled",
         };
@@ -101,6 +104,9 @@ impl Error {
     }
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Internal, message)
+    }
+    pub fn consistency(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::Consistency, message)
     }
     pub fn cancelled() -> Self {
         Self::new(ErrorKind::Cancelled, "operation cancelled")
@@ -182,6 +188,7 @@ mod tests {
             Error::resync_required("x"),
             Error::resource("x"),
             Error::internal("x"),
+            Error::consistency("x"),
             Error::cancelled(),
         ] {
             assert!(!e.is_retryable(), "{e}");
