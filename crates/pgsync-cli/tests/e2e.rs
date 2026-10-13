@@ -722,3 +722,39 @@ async fn large_table_snapshot() {
     assert_eq!(p.terminate(), 0);
     job.teardown().await;
 }
+
+#[tokio::test]
+async fn idle_slot_advances_over_unpublished_wal() {
+    e2e_guard!();
+    let mut job = Job::new("idle", ACCOUNTS_DDL, &["accounts", "events"], "", "").await;
+    seed_accounts(&job.src, &job.schema, 5).await;
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", T).await;
+    // WAL that carries nothing for this publication.
+    job.src
+        .batch_execute("CREATE TABLE IF NOT EXISTS public.unpublished_fill (g int, pad text); INSERT INTO public.unpublished_fill SELECT g, repeat('u', 500) FROM generate_series(1, 20000) g; DROP TABLE public.unpublished_fill")
+        .await
+        .unwrap();
+    let head = job.source_wal_lsn().await;
+    // The walsender pings after wal_sender_timeout/2 (15 s in compose); the reply must
+    // carry the skipped position so the slot does not retain that WAL.
+    let start = std::time::Instant::now();
+    loop {
+        let row = job
+            .src
+            .query_one("SELECT confirmed_flush_lsn >= $1::text::pg_lsn, confirmed_flush_lsn::text FROM pg_replication_slots WHERE slot_name = $2", &[&head, &job.slot])
+            .await
+            .unwrap();
+        if row.get::<_, bool>(0) {
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(45),
+            "slot stuck at {} while WAL head is {head}",
+            row.get::<_, String>(1)
+        );
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}

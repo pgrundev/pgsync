@@ -1,0 +1,5 @@
+{"timestamp":"2026-10-13T07:59:07.849778Z","level":"INFO","message":"pgsync 0.1.0","job":"bench","source":"postgres://pgsync@localhost:5533/app","target":"postgres://postgres@localhost:5534/app"}
+{"timestamp":"2026-10-13T07:59:08.079389Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_bench","from":"2/AB2FD798","confirmed_flush":"Some(Lsn(2/AB2FD848))"}
+{"timestamp":"2026-10-13T07:59:08.079412Z","level":"INFO","message":"replication stream opened","from":"2/AB2FD798","acked":"2/AB2FD848","server_wal_end":"2/B2370350","state":"STREAMING"}
+{"timestamp":"2026-10-13T07:59:15.517026Z","level":"INFO","message":"shutdown requested; finishing the current transaction"}
+{"timestamp":"2026-10-13T07:59:15.517126Z","level":"INFO","message":"replication stopped cleanly","committed":"2/B2370350","acked":"2/B2370350"}

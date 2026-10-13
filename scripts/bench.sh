@@ -119,7 +119,7 @@ TGT_HASH=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER B
 SRC_HASH2=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.ledger t")
 TGT_HASH2=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.ledger t")
 TXNS=$(psql -Atq "$TARGET_URL" -c "SELECT txns_applied FROM pgsync.job WHERE job_id='bench'")
-ROWS_APPLIED=$(grep -o '"rows_applied":[0-9]*' "$LOG" | tail -1 | cut -d: -f2)
+ROWS_APPLIED=$(grep -o '"rows_applied":[0-9]*' "$LOG" | tail -1 | cut -d: -f2 || true)
 CDC_SECS=$(echo "$T3 - $T1" | bc)
 LAG_SECS=$(echo "$T3 - $T2" | bc)
 

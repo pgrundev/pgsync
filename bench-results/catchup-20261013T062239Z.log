@@ -1,0 +1,10 @@
+{"timestamp":"2026-10-13T07:01:55.392863Z","level":"INFO","message":"pgsync 0.1.0","job":"bench","source":"postgres://pgsync@localhost:5533/app","target":"postgres://postgres@localhost:5534/app"}
+{"timestamp":"2026-10-13T07:01:55.810577Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_bench","from":"1/6AA23C40","confirmed_flush":"Some(Lsn(1/6AA23C40))"}
+{"timestamp":"2026-10-13T07:01:55.810607Z","level":"INFO","message":"replication stream opened","from":"1/6AA23C40","acked":"1/6AA23C40","server_wal_end":"1/D31220D0","state":"STREAMING"}
+{"timestamp":"2026-10-13T07:02:05.566038Z","level":"INFO","message":"wal monitor","slot":"slot_bench","active":true,"wal_status":"Some(\"extended\")","retained_wal_bytes":1783883552,"slot_lag_bytes":1752163528,"apply_lag_bytes":541162832,"safe_wal_size":"Some(2515394296)"}
+{"timestamp":"2026-10-13T07:02:05.566086Z","level":"WARN","message":"ALARM: replication lag exceeds max_replication_lag_bytes","slot_lag_bytes":1752163528,"threshold":1073741824}
+{"timestamp":"2026-10-13T07:02:05.566093Z","level":"WARN","message":"ALARM: WAL retained by the slot exceeds safety.wal_retention_alarm_bytes","retained_wal_bytes":1783883552,"threshold":1073741824}
+{"timestamp":"2026-10-13T07:02:15.570076Z","level":"INFO","message":"wal monitor","slot":"slot_bench","active":true,"wal_status":"Some(\"extended\")","retained_wal_bytes":1745389272,"slot_lag_bytes":534086648,"apply_lag_bytes":244888296,"safe_wal_size":"Some(2565725944)"}
+{"timestamp":"2026-10-13T07:02:15.570106Z","level":"WARN","message":"ALARM: WAL retained by the slot exceeds safety.wal_retention_alarm_bytes","retained_wal_bytes":1745389272,"threshold":1073741824}
+{"timestamp":"2026-10-13T07:02:21.580594Z","level":"INFO","message":"shutdown requested; finishing the current transaction"}
+{"timestamp":"2026-10-13T07:02:21.580683Z","level":"INFO","message":"replication stopped cleanly","committed":"1/D31220D0","acked":"1/D3122108"}

@@ -20,7 +20,7 @@ start_one() { # dir port extra-conf
     cat >> "$1/postgresql.conf" <<CONF
 port = $2
 listen_addresses = 'localhost'
-unix_socket_directories = '$1'
+unix_socket_directories = ''
 fsync = on
 shared_buffers = 256MB
 log_min_messages = warning

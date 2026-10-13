@@ -243,6 +243,11 @@ async fn reader_task<S: EventStream>(
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     ticker.tick().await; // first tick completes immediately; skip it
     let mut last_received = Lsn::ZERO;
+    // Position last reported while reading. Unsolicited reports are sent only when it
+    // changed: a server that hears from us every tick never sends the keepalive that
+    // carries the position of WAL it skipped (unpublished tables, vacuum), and the slot
+    // would never advance over it while the publication is idle.
+    let mut last_sent_ack = Lsn::ZERO;
 
     let feedback = |ack: &watch::Receiver<AckPosition>, last_received: Lsn, reply: bool| {
         let acked = ack.borrow().acked;
@@ -263,8 +268,12 @@ async fn reader_task<S: EventStream>(
                 return Ok(());
             }
             _ = ticker.tick() => {
-                stream.send_feedback(feedback(&ack_rx, last_received, false)).await?;
-                metrics.add(&metrics.feedback_sent, 1);
+                let fb = feedback(&ack_rx, last_received, false);
+                if fb.flushed != last_sent_ack {
+                    stream.send_feedback(fb).await?;
+                    last_sent_ack = fb.flushed;
+                    metrics.add(&metrics.feedback_sent, 1);
+                }
                 continue;
             }
             r = stream.next_event() => r?,
@@ -282,9 +291,9 @@ async fn reader_task<S: EventStream>(
                 metrics.set_lsn(&metrics.server_wal_end, *wal_end);
                 // Answer keepalives promptly (the server may have requested a reply) with
                 // the last durable position.
-                stream
-                    .send_feedback(feedback(&ack_rx, last_received, false))
-                    .await?;
+                let fb = feedback(&ack_rx, last_received, false);
+                stream.send_feedback(fb).await?;
+                last_sent_ack = fb.flushed;
                 metrics.add(&metrics.feedback_sent, 1);
             }
             _ => {}
@@ -299,9 +308,12 @@ async fn reader_task<S: EventStream>(
                     return Ok(());
                 }
                 _ = ticker.tick() => {
-                    // Applier is slow (backpressure); keep the walsender alive with the
-                    // last durable position.
-                    stream.send_feedback(feedback(&ack_rx, last_received, false)).await?;
+                    // Applier is slow (backpressure) and the socket is not being read, so
+                    // server pings cannot be answered: send an unconditional heartbeat with
+                    // the last durable position.
+                    let fb = feedback(&ack_rx, last_received, false);
+                    stream.send_feedback(fb).await?;
+                    last_sent_ack = fb.flushed;
                     metrics.add(&metrics.feedback_sent, 1);
                 }
                 p = tx.reserve(bytes) => match p {
@@ -764,6 +776,33 @@ mod tests {
         )
         .await;
         assert_eq!(res.err().map(|e| e.kind()), Some(ErrorKind::Internal));
+    }
+
+    #[tokio::test]
+    async fn idle_reader_reports_only_changed_positions() {
+        // One keepalive, then silence: the position is reported when it changes, never on
+        // every tick, so the server will ping us with the skipped-WAL position.
+        let sink = FakeSink(Default::default());
+        let feedback = Arc::new(Mutex::new(vec![]));
+        let stream = FakeStream::new(vec![keepalive(500)], feedback.clone());
+        let cancel = CancellationToken::new();
+        let handle = tokio::spawn(run_apply_loop(
+            stream,
+            sink,
+            checkpoint(JobState::Streaming),
+            Lsn(1000),
+            &*Box::leak(Box::new(resources())),
+            Arc::new(Metrics::new()),
+            cancel.clone(),
+        ));
+        tokio::time::sleep(Duration::from_millis(200)).await; // ~10 ticks at 20ms
+        cancel.cancel();
+        let _ = handle.await;
+        let fb = feedback.lock().unwrap();
+        // keepalive answer + one tick after the applier persisted 500 + final report on
+        // cancel; never one per tick.
+        assert!(fb.len() <= 3, "unsolicited feedback every tick: {fb:?}");
+        assert_eq!(fb.last().unwrap().flushed, Lsn(500));
     }
 
     #[tokio::test]

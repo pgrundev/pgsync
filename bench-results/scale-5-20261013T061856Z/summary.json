@@ -1,0 +1,8 @@
+{
+  "workers": 5,
+  "consistent_jobs": 5,
+  "aggregate_rss_avg_mb": 48.8,
+  "aggregate_rss_peak_mb": 73.3,
+  "per_process_rss_avg_mb": 9.8,
+  "per_process_rss_peak_mb": 15.0
+}

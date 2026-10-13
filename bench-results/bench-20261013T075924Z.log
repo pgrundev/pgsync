@@ -1,0 +1,16 @@
+{"timestamp":"2026-10-13T07:59:28.152970Z","level":"INFO","message":"pgsync 0.1.0","job":"bench","source":"postgres://pgsync@localhost:5533/app","target":"postgres://postgres@localhost:5534/app"}
+{"timestamp":"2026-10-13T07:59:28.748047Z","level":"INFO","message":"replication slot created with exported snapshot","slot":"slot_bench","consistent_point":"2/BEEA3110","snapshot":"00000097-0000000A-1"}
+{"timestamp":"2026-10-13T07:59:28.805493Z","level":"INFO","message":"schema dumped","tables":2,"bytes":2403}
+{"timestamp":"2026-10-13T07:59:28.820347Z","level":"INFO","message":"target schema created from pg_dump"}
+{"timestamp":"2026-10-13T07:59:30.246688Z","level":"INFO","message":"copied","table":"bench.ledger","rows":400000,"bytes":24018878}
+{"timestamp":"2026-10-13T07:59:31.251193Z","level":"INFO","message":"copied","table":"bench.items","rows":400000,"bytes":90389754}
+{"timestamp":"2026-10-13T07:59:31.251265Z","level":"INFO","message":"initial copy finished","tables":2,"rows":800000,"bytes":114408632,"seconds":"2.5","mb_per_s":"45.7"}
+{"timestamp":"2026-10-13T07:59:31.251802Z","level":"INFO","message":"snapshot complete; switching to CDC","consistent_point":"2/BEEA3110"}
+{"timestamp":"2026-10-13T07:59:31.398123Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_bench","from":"2/BEEA3110","confirmed_flush":"Some(Lsn(2/BEEA3110))"}
+{"timestamp":"2026-10-13T07:59:31.398140Z","level":"INFO","message":"replication stream opened","from":"2/BEEA3110","acked":"2/BEEA3110","server_wal_end":"2/BEEA3110","state":"CATCHING_UP"}
+{"timestamp":"2026-10-13T07:59:31.399439Z","level":"INFO","message":"caught up; now streaming","lsn":"2/BEEA3110"}
+{"timestamp":"2026-10-13T08:16:04.841128Z","level":"WARN","message":"transient failure; reconnecting","error":"[transient] postgres://pgsync@localhost:5533/app: connection closed by server","attempt":1,"delay_ms":1000}
+{"timestamp":"2026-10-13T08:16:06.033151Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_bench","from":"2/BFC8B348","confirmed_flush":"Some(Lsn(2/BFC7E680))"}
+{"timestamp":"2026-10-13T08:16:06.033177Z","level":"INFO","message":"replication stream opened","from":"2/BFC8B348","acked":"2/BFC8B348","server_wal_end":"2/BFC984C0","state":"STREAMING"}
+{"timestamp":"2026-10-13T08:16:06.128165Z","level":"INFO","message":"shutdown requested; finishing the current transaction"}
+{"timestamp":"2026-10-13T08:16:06.128248Z","level":"INFO","message":"replication stopped cleanly","committed":"2/BFC984C0","acked":"2/BFC984C0"}

@@ -1,0 +1,16 @@
+{"timestamp":"2026-10-13T06:21:25.603716Z","level":"INFO","message":"pgsync 0.1.0","job":"scale16","source":"postgres://pgsync@localhost:5533/app","target":"postgres://postgres@localhost:5534/app"}
+{"timestamp":"2026-10-13T06:21:29.793149Z","level":"INFO","message":"replication slot created with exported snapshot","slot":"slot_scale16","consistent_point":"1/AC49FE98","snapshot":"00000096-00000007-1"}
+{"timestamp":"2026-10-13T06:21:29.881717Z","level":"INFO","message":"schema dumped","tables":1,"bytes":1295}
+{"timestamp":"2026-10-13T06:21:29.890961Z","level":"INFO","message":"target schema created from pg_dump"}
+{"timestamp":"2026-10-13T06:21:32.961760Z","level":"INFO","message":"copied","table":"scale16.t","rows":20000,"bytes":1126682}
+{"timestamp":"2026-10-13T06:21:32.962849Z","level":"INFO","message":"initial copy finished","tables":1,"rows":20000,"bytes":1126682,"seconds":"3.2","mb_per_s":"0.4"}
+{"timestamp":"2026-10-13T06:21:32.974363Z","level":"INFO","message":"snapshot complete; switching to CDC","consistent_point":"1/AC49FE98"}
+{"timestamp":"2026-10-13T06:21:33.504387Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_scale16","from":"1/AC49FE98","confirmed_flush":"Some(Lsn(1/AC49FE98))"}
+{"timestamp":"2026-10-13T06:21:33.504420Z","level":"INFO","message":"replication stream opened","from":"1/AC49FE98","acked":"1/AC49FE98","server_wal_end":"1/AC49FFB0","state":"CATCHING_UP"}
+{"timestamp":"2026-10-13T06:21:33.506846Z","level":"INFO","message":"caught up; now streaming","lsn":"1/AC49FFB0"}
+{"timestamp":"2026-10-13T06:22:02.978681Z","level":"INFO","message":"status","state":"STREAMING","txns_applied":49,"rows_applied":539,"events":1659,"bytes_received":98332,"committed_lsn":"1/AC863A98","acked_lsn":"1/AC8673E0","apply_lag_bytes":14664,"inflight_items":0,"rss_mb":10,"reconnects":0}
+{"timestamp":"2026-10-13T06:22:03.589953Z","level":"INFO","message":"wal monitor","slot":"slot_scale16","active":true,"wal_status":"Some(\"reserved\")","retained_wal_bytes":2972176,"slot_lag_bytes":4896,"apply_lag_bytes":4896,"safe_wal_size":"Some(4302894696)"}
+{"timestamp":"2026-10-13T06:22:32.997871Z","level":"INFO","message":"status","state":"STREAMING","txns_applied":103,"rows_applied":1131,"events":3439,"bytes_received":204428,"committed_lsn":"1/AE2C5AB8","acked_lsn":"1/AE2F1000","apply_lag_bytes":177480,"inflight_items":0,"rss_mb":10,"reconnects":0}
+{"timestamp":"2026-10-13T06:22:33.607459Z","level":"INFO","message":"wal monitor","slot":"slot_scale16","active":true,"wal_status":"Some(\"reserved\")","retained_wal_bytes":27591648,"slot_lag_bytes":18448,"apply_lag_bytes":179960,"safe_wal_size":"Some(4274406072)"}
+{"timestamp":"2026-10-13T06:22:37.249896Z","level":"INFO","message":"shutdown requested; finishing the current transaction"}
+{"timestamp":"2026-10-13T06:22:37.261496Z","level":"INFO","message":"replication stopped cleanly","committed":"1/AE43B0B8","acked":"1/AE4A7A70"}
