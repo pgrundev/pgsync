@@ -150,9 +150,15 @@ schedule() { # minute -> action or empty
   fi
 }
 
+MIN_FREE_MB=${MIN_FREE_MB:-2048}
+free_mb() { df -k . | awk 'NR==2 {print int($4/1024)}'; }
 END=$((T0 + DURATION_SECS))
 while [ "$(date +%s)" -lt $END ]; do
   sample
+  if [ "$(free_mb)" -lt "$MIN_FREE_MB" ]; then
+    log "free disk $(free_mb) MB below MIN_FREE_MB=$MIN_FREE_MB; ending the soak early (clean stop, then hashes)"
+    break
+  fi
   m=$(( ($(date +%s) - T0) / UNIT ))
   act=$(schedule $m)
   if [ -n "$act" ] && [[ " $fired " != *" $m "* ]]; then
