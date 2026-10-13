@@ -1,0 +1,141 @@
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale1.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale2.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale3.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale4.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale5.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale6.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale7.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale8.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale9.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale10.t
+NOTICE:  publication "pub_scale11" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale11" does not exist, skipping
+NOTICE:  publication "pub_scale12" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale12" does not exist, skipping
+NOTICE:  publication "pub_scale13" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale13" does not exist, skipping
+NOTICE:  publication "pub_scale14" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale14" does not exist, skipping
+NOTICE:  publication "pub_scale15" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale15" does not exist, skipping
+NOTICE:  publication "pub_scale16" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale16" does not exist, skipping
+NOTICE:  publication "pub_scale17" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale17" does not exist, skipping
+NOTICE:  publication "pub_scale18" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale18" does not exist, skipping
+NOTICE:  publication "pub_scale19" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale19" does not exist, skipping
+NOTICE:  publication "pub_scale20" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale20" does not exist, skipping
+== started 20 workers: 82277 82281 82285 82286 82287 82288 82289 82290 82291 82292 82293 82294 82298 82299 82300 82301 82302 82303 82304 82305
+== all streaming; idle phase 30s
+== active phase 60s
+{
+  "workers": 20,
+  "consistent_jobs": 20,
+  "idle": {
+    "aggregate_rss_avg_mb": 220.2,
+    "aggregate_rss_peak_mb": 348.2,
+    "per_process_rss_avg_mb": 11.0,
+    "per_process_rss_peak_mb": 18.9,
+    "aggregate_cpu_avg_pct": 26.6
+  },
+  "active": {
+    "aggregate_rss_avg_mb": 203.9,
+    "aggregate_rss_peak_mb": 290.6,
+    "per_process_rss_avg_mb": 10.2,
+    "per_process_rss_peak_mb": 15.4,
+    "aggregate_cpu_avg_pct": 13.0
+  }
+}

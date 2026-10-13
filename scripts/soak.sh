@@ -11,7 +11,10 @@
 #   kill walsender   at 31 113 197
 # Workload phases repeat every 20 minutes: 0-12 steady (4 writers), 12-14 burst (bulk
 # updates), 14-16 idle, 16-18 one large transaction (LARGE_ROWS rows), 18-20 steady.
+# SCHEDULE_UNIT_SECS (default 60) is the length of a "minute" above; set it to 5 for a
+# smoke test that exercises every path in a few minutes.
 set -euo pipefail
+UNIT=${SCHEDULE_UNIT_SECS:-60}
 
 ROWS=${ROWS:-400000}
 DURATION_SECS=${DURATION_SECS:-14400}
@@ -90,7 +93,7 @@ T0=$(date +%s)
 # ---- workload --------------------------------------------------------------------------
 STOP=$OUT/stop
 phase_of() { # seconds since T0 -> steady|burst|idle|large
-  local m=$(( ($1 / 60) % 20 ))
+  local m=$(( ($1 / UNIT) % 20 ))
   if [ $m -lt 12 ]; then echo steady; elif [ $m -lt 14 ]; then echo burst; elif [ $m -lt 16 ]; then echo idle; elif [ $m -lt 18 ]; then echo large; else echo steady; fi
 }
 writer() { # id
@@ -105,7 +108,7 @@ writer() { # id
       large)
         if [ "$w" = 1 ]; then
           psql -q "$ADMIN_URL" -c "BEGIN; INSERT INTO soak.ledger (item_id, delta, note) SELECT (g % $ROWS) + 1, 2, 'large-' || g FROM generate_series(1, $LARGE_ROWS) g; DELETE FROM soak.ledger WHERE note LIKE 'large-%' AND id % 2 = 0; COMMIT;" >/dev/null 2>&1 || true
-          sleep 60
+          sleep $(( UNIT ))
         else
           sleep 5
         fi;;
@@ -150,7 +153,7 @@ schedule() { # minute -> action or empty
 END=$((T0 + DURATION_SECS))
 while [ "$(date +%s)" -lt $END ]; do
   sample
-  m=$(( ($(date +%s) - T0) / 60 ))
+  m=$(( ($(date +%s) - T0) / UNIT ))
   act=$(schedule $m)
   if [ -n "$act" ] && [[ " $fired " != *" $m "* ]]; then
     fired="$fired $m"
@@ -183,9 +186,11 @@ SI=$(h "$ADMIN_URL" items); TI=$(h "$TARGET_URL" items); SL=$(h "$ADMIN_URL" led
 log "items  source=$SI target=$TI"
 log "ledger source=$SL target=$TL"
 
-python3 - "$OUT" "$DRAIN" "$SI" "$TI" "$SL" "$TL" <<'PY' | tee "$OUT/summary.json"
+MACHINE="$(uname -m) $(sysctl -n machdep.cpu.brand_string 2>/dev/null || grep -m1 'model name' /proc/cpuinfo | cut -d: -f2) $(uname -sr)"
+python3 - "$OUT" "$DRAIN" "$SI" "$TI" "$SL" "$TL" "$MACHINE" "$(git rev-parse --short HEAD)" <<'PY' | tee "$OUT/summary.json"
 import sys, csv, json, statistics
 out, drain, si, ti, sl, tl = sys.argv[1], int(sys.argv[2]), *sys.argv[3:7]
+machine, commit = sys.argv[7], sys.argv[8]
 rows = list(csv.DictReader(open(f"{out}/samples.csv")))
 alive = [r for r in rows if r["pgsync_alive"] == "1" and int(r["rss_bytes"]) > 0]
 rss = [int(r["rss_bytes"]) for r in alive]
@@ -220,5 +225,5 @@ print(json.dumps({
   "unexpected_exits": events.count("exited unexpectedly"),
   "drain_seconds_after_writers_stopped": drain,
   "consistent": si == ti and sl == tl, "items": {"source": si, "target": ti}, "ledger": {"source": sl, "target": tl},
-  "machine": "$(uname -m)", "stamp": out.split('-')[-1]}, indent=2))
+  "machine": machine, "pgsync_commit": commit, "stamp": out.split('-')[-1]}, indent=2))
 PY

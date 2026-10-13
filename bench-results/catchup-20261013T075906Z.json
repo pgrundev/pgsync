@@ -1,0 +1,16 @@
+{
+  "backlog_txns": 5000,
+  "rows_per_txn": 100,
+  "backlog_wal_bytes": 117910280,
+  "catchup_seconds": 8.0,
+  "txns_per_s": 625.0,
+  "rows_applied_logged": 0,
+  "rows_per_s": 0.0,
+  "txns_applied_total": 182060,
+  "wal_mb_per_s": 14.7,
+  "rss_avg_mb": 34.9,
+  "rss_peak_mb": 44.3,
+  "cpu_avg_pct": 97.8,
+  "consistent": true,
+  "timestamp": "20261013T075906Z"
+}

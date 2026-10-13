@@ -1,0 +1,5 @@
+job: {id: scale3}
+source: {url_env: SOURCE_URL, publication: pub_scale3, slot: slot_scale3}
+target: {url_env: TARGET_URL}
+replication: {tables: [scale3.t]}
+safety: {monitor_interval: 30s}

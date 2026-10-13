@@ -1,0 +1,99 @@
+{
+  "runs": [
+    {
+      "workers": 1,
+      "consistent_jobs": 1,
+      "idle": {
+        "aggregate_rss_avg_mb": 8.9,
+        "aggregate_rss_peak_mb": 14.2,
+        "per_process_rss_avg_mb": 8.9,
+        "per_process_rss_peak_mb": 14.2,
+        "aggregate_cpu_avg_pct": 0.5
+      },
+      "active": {
+        "aggregate_rss_avg_mb": 9.4,
+        "aggregate_rss_peak_mb": 10.8,
+        "per_process_rss_avg_mb": 9.4,
+        "per_process_rss_peak_mb": 10.8,
+        "aggregate_cpu_avg_pct": 1.4
+      }
+    },
+    {
+      "workers": 5,
+      "consistent_jobs": 5,
+      "idle": {
+        "aggregate_rss_avg_mb": 61.0,
+        "aggregate_rss_peak_mb": 90.5,
+        "per_process_rss_avg_mb": 12.2,
+        "per_process_rss_peak_mb": 18.3,
+        "aggregate_cpu_avg_pct": 2.8
+      },
+      "active": {
+        "aggregate_rss_avg_mb": 53.2,
+        "aggregate_rss_peak_mb": 73.0,
+        "per_process_rss_avg_mb": 10.6,
+        "per_process_rss_peak_mb": 14.9,
+        "aggregate_cpu_avg_pct": 4.7
+      }
+    },
+    {
+      "workers": 10,
+      "consistent_jobs": 10,
+      "idle": {
+        "aggregate_rss_avg_mb": 106.0,
+        "aggregate_rss_peak_mb": 172.5,
+        "per_process_rss_avg_mb": 10.6,
+        "per_process_rss_peak_mb": 17.6,
+        "aggregate_cpu_avg_pct": 8.9
+      },
+      "active": {
+        "aggregate_rss_avg_mb": 107.4,
+        "aggregate_rss_peak_mb": 148.2,
+        "per_process_rss_avg_mb": 10.7,
+        "per_process_rss_peak_mb": 15.2,
+        "aggregate_cpu_avg_pct": 7.4
+      }
+    },
+    {
+      "workers": 20,
+      "consistent_jobs": 20,
+      "idle": {
+        "aggregate_rss_avg_mb": 220.2,
+        "aggregate_rss_peak_mb": 348.2,
+        "per_process_rss_avg_mb": 11.0,
+        "per_process_rss_peak_mb": 18.9,
+        "aggregate_cpu_avg_pct": 26.6
+      },
+      "active": {
+        "aggregate_rss_avg_mb": 203.9,
+        "aggregate_rss_peak_mb": 290.6,
+        "per_process_rss_avg_mb": 10.2,
+        "per_process_rss_peak_mb": 15.4,
+        "aggregate_cpu_avg_pct": 13.0
+      }
+    }
+  ],
+  "incremental_mb_per_job": [
+    {
+      "from": 1,
+      "to": 5,
+      "idle": 13.03,
+      "active": 10.95,
+      "active_peak": 15.55
+    },
+    {
+      "from": 5,
+      "to": 10,
+      "idle": 9.0,
+      "active": 10.84,
+      "active_peak": 15.04
+    },
+    {
+      "from": 10,
+      "to": 20,
+      "idle": 11.42,
+      "active": 9.65,
+      "active_peak": 14.24
+    }
+  ]
+}

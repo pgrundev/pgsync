@@ -1,0 +1,51 @@
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale1.t
+NOTICE:  publication "pub_scale2" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale2" does not exist, skipping
+NOTICE:  publication "pub_scale3" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale3" does not exist, skipping
+NOTICE:  publication "pub_scale4" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale4" does not exist, skipping
+NOTICE:  publication "pub_scale5" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale5" does not exist, skipping
+== started 5 workers: 53783 53784 53785 53786 53787
+== all streaming; idle phase 30s
+== active phase 60s
+{
+  "workers": 5,
+  "consistent_jobs": 5,
+  "idle": {
+    "aggregate_rss_avg_mb": 61.0,
+    "aggregate_rss_peak_mb": 90.5,
+    "per_process_rss_avg_mb": 12.2,
+    "per_process_rss_peak_mb": 18.3,
+    "aggregate_cpu_avg_pct": 2.8
+  },
+  "active": {
+    "aggregate_rss_avg_mb": 53.2,
+    "aggregate_rss_peak_mb": 73.0,
+    "per_process_rss_avg_mb": 10.6,
+    "per_process_rss_peak_mb": 14.9,
+    "aggregate_cpu_avg_pct": 4.7
+  }
+}

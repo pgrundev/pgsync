@@ -1,0 +1,27 @@
+NOTICE:  publication "pub_scale1" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale1" does not exist, skipping
+== started 1 workers: 35837
+== all streaming; idle phase 30s
+== active phase 60s
+{
+  "workers": 1,
+  "consistent_jobs": 1,
+  "idle": {
+    "aggregate_rss_avg_mb": 8.9,
+    "aggregate_rss_peak_mb": 14.2,
+    "per_process_rss_avg_mb": 8.9,
+    "per_process_rss_peak_mb": 14.2,
+    "aggregate_cpu_avg_pct": 0.5
+  },
+  "active": {
+    "aggregate_rss_avg_mb": 9.4,
+    "aggregate_rss_peak_mb": 10.8,
+    "per_process_rss_avg_mb": 9.4,
+    "per_process_rss_peak_mb": 10.8,
+    "aggregate_cpu_avg_pct": 1.4
+  }
+}

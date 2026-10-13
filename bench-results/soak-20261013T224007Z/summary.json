@@ -1,0 +1,50 @@
+{
+  "duration_seconds": 199,
+  "samples": 91,
+  "rss_avg_mb": 16.2,
+  "rss_peak_mb": 45.5,
+  "rss_quarters": [
+    {
+      "rss_avg_mb": 14.7,
+      "rss_peak_mb": 36.3
+    },
+    {
+      "rss_avg_mb": 19.0,
+      "rss_peak_mb": 36.9
+    },
+    {
+      "rss_avg_mb": 13.1,
+      "rss_peak_mb": 17.1
+    },
+    {
+      "rss_avg_mb": 18.3,
+      "rss_peak_mb": 45.5
+    }
+  ],
+  "rss_first_10min_avg_mb": 16.2,
+  "rss_last_10min_avg_mb": 16.2,
+  "cpu_avg_pct": 5.2,
+  "apply_lag_p50_mb": 0.0,
+  "apply_lag_p99_mb": 3.89,
+  "apply_lag_max_mb": 3.89,
+  "retained_wal_max_mb": 18.3,
+  "longest_lag_over_64mb_samples": 0,
+  "txns_applied": 5641,
+  "reconnects_logged": 1,
+  "sigkills": 2,
+  "sigterms": 1,
+  "walsender_kills": 1,
+  "unexpected_exits": 0,
+  "drain_seconds_after_writers_stopped": 0,
+  "consistent": true,
+  "items": {
+    "source": "854aabceab68302576cd977251f9ee6d:50000",
+    "target": "854aabceab68302576cd977251f9ee6d:50000"
+  },
+  "ledger": {
+    "source": "723003142e309ca06f642fd32359efee:242975",
+    "target": "723003142e309ca06f642fd32359efee:242975"
+  },
+  "machine": "$(uname -m)",
+  "stamp": "20261013T224007Z"
+}

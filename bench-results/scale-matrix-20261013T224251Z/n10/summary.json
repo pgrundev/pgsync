@@ -1,0 +1,18 @@
+{
+  "workers": 10,
+  "consistent_jobs": 10,
+  "idle": {
+    "aggregate_rss_avg_mb": 106.0,
+    "aggregate_rss_peak_mb": 172.5,
+    "per_process_rss_avg_mb": 10.6,
+    "per_process_rss_peak_mb": 17.6,
+    "aggregate_cpu_avg_pct": 8.9
+  },
+  "active": {
+    "aggregate_rss_avg_mb": 107.4,
+    "aggregate_rss_peak_mb": 148.2,
+    "per_process_rss_avg_mb": 10.7,
+    "per_process_rss_peak_mb": 15.2,
+    "aggregate_cpu_avg_pct": 7.4
+  }
+}

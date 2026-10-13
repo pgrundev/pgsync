@@ -1,0 +1,5 @@
+job: {id: scale17}
+source: {url_env: SOURCE_URL, publication: pub_scale17, slot: slot_scale17}
+target: {url_env: TARGET_URL}
+replication: {tables: [scale17.t]}
+safety: {monitor_interval: 30s}

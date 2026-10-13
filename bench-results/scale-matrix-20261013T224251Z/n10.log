@@ -1,0 +1,81 @@
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale1.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale2.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale3.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale4.t
+ pg_drop_replication_slot 
+--------------------------
+ 
+(1 row)
+
+NOTICE:  drop cascades to table scale5.t
+NOTICE:  publication "pub_scale6" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale6" does not exist, skipping
+NOTICE:  publication "pub_scale7" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale7" does not exist, skipping
+NOTICE:  publication "pub_scale8" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale8" does not exist, skipping
+NOTICE:  publication "pub_scale9" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale9" does not exist, skipping
+NOTICE:  publication "pub_scale10" does not exist, skipping
+ pg_drop_replication_slot 
+--------------------------
+(0 rows)
+
+NOTICE:  schema "scale10" does not exist, skipping
+== started 10 workers: 66906 66907 66908 66909 66910 66911 66912 66913 66914 66915
+== all streaming; idle phase 30s
+== active phase 60s
+{
+  "workers": 10,
+  "consistent_jobs": 10,
+  "idle": {
+    "aggregate_rss_avg_mb": 106.0,
+    "aggregate_rss_peak_mb": 172.5,
+    "per_process_rss_avg_mb": 10.6,
+    "per_process_rss_peak_mb": 17.6,
+    "aggregate_cpu_avg_pct": 8.9
+  },
+  "active": {
+    "aggregate_rss_avg_mb": 107.4,
+    "aggregate_rss_peak_mb": 148.2,
+    "per_process_rss_avg_mb": 10.7,
+    "per_process_rss_peak_mb": 15.2,
+    "aggregate_cpu_avg_pct": 7.4
+  }
+}

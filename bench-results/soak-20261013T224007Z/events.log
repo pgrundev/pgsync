@@ -1,0 +1,16 @@
+22:40:07 preparing 50000 rows per table
+22:40:10 pgsync bootstrap started pid=87731
+22:40:12 snapshot complete; CDC phase begins
+22:40:12 4 writers started
+22:40:47 minute 7: SIGKILL pgsync
+22:40:49 pgsync run started pid=99665
+22:41:27 minute 15: SIGTERM pgsync
+22:41:29 pgsync run started pid=9387
+22:42:07 minute 23: SIGKILL pgsync
+22:42:09 pgsync run started pid=21739
+22:42:48 minute 31: terminating walsender
+22:43:33 duration reached; stopping writers
+22:43:33 writers stopped; waiting for convergence
+22:43:33 pgsync stopped; comparing contents
+22:43:34 items  source=854aabceab68302576cd977251f9ee6d:50000 target=854aabceab68302576cd977251f9ee6d:50000
+22:43:34 ledger source=723003142e309ca06f642fd32359efee:242975 target=723003142e309ca06f642fd32359efee:242975
