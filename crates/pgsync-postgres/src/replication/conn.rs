@@ -107,11 +107,10 @@ impl ReplicationConnection {
                     let connector = tokio_rustls::TlsConnector::from(config);
                     let name = tls::server_name(&info.host)?;
                     let stream = connector.connect(name, tcp).await.map_err(|e| {
-                        Error::with_source(
-                            ErrorKind::Config,
-                            format!("{label}: TLS handshake failed"),
-                            e,
-                        )
+                        Error::config(format!(
+                            "{label}: TLS handshake failed: {}",
+                            crate::errors::error_chain(&e)
+                        ))
                     })?;
                     Box::pin(stream)
                 }

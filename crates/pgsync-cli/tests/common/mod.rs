@@ -8,10 +8,13 @@
 //!   PGSYNC_E2E_TARGET_URL              superuser on the target
 #![allow(dead_code)]
 
+use pgsync_postgres::client::PgClient;
+use pgsync_postgres::url::ConnectionInfo;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
-use tokio_postgres::{Client, NoTls};
+
+pub type Client = PgClient;
 
 pub const DEFAULT_SOURCE_ADMIN: &str = "postgres://postgres:postgres@localhost:5433/app";
 pub const DEFAULT_SOURCE: &str = "postgres://pgsync:pgsync@localhost:5433/app";
@@ -34,12 +37,17 @@ macro_rules! e2e_guard {
     };
 }
 
+/// Admin connection for the harness itself, through pgsync's own client so that the TLS
+/// lab (verified TLS on a non-loopback address, private CA from `PGSYNC_TLS_CA`) works.
 pub async fn connect(url: &str) -> Client {
-    let (client, conn) = tokio_postgres::connect(url, NoTls).await.expect("connect");
-    tokio::spawn(async move {
-        let _ = conn.await;
-    });
-    client
+    let safety = pgsync_core::config::SafetyConfig {
+        tls_ca_file: std::env::var("PGSYNC_TLS_CA").ok(),
+        ..Default::default()
+    };
+    let info = ConnectionInfo::parse(url, &safety).expect("url");
+    pgsync_postgres::client::connect(&info, &safety, Duration::from_secs(10), "pgsync-e2e")
+        .await
+        .expect("connect")
 }
 
 pub fn env_url(var: &str, default: &str) -> String {
@@ -146,6 +154,11 @@ impl Job {
             .iter()
             .map(|t| format!("    - {}.{t}", self.schema))
             .collect();
+        // TLS lab (scripts/tls-lab.sh): trust its private CA.
+        let safety_extra = match std::env::var("PGSYNC_TLS_CA") {
+            Ok(ca) => format!("{safety_extra}\n  tls_ca_file: {ca}"),
+            Err(_) => safety_extra.to_owned(),
+        };
         let yaml = format!(
             "job:\n  id: {}\nsource:\n  url_env: E2E_SOURCE_URL\n  publication: {}\n  slot: {}\ntarget:\n  url_env: E2E_TARGET_URL\nreplication:\n  tables:\n{}\nresources:\n  connection_timeout: 5s\n  feedback_interval: 1s\n  retry_backoff:\n    initial: 200ms\n    max: 2s\n{}\nsafety:\n  monitor_interval: 2s\n{}\n",
             self.job_id,
@@ -381,6 +394,90 @@ impl Drop for Proc {
 pub fn docker(args: &[&str]) {
     let status = Command::new("docker").args(args).status().expect("docker");
     assert!(status.success(), "docker {args:?} failed");
+}
+
+/// Which server a disruptive scenario acts on.
+#[derive(Clone, Copy)]
+pub enum Server {
+    Source,
+    Target,
+}
+
+/// Host-local cluster handle (`PGSYNC_E2E_SOURCE_DATADIR` / `PGSYNC_E2E_TARGET_DATADIR`
+/// plus `PGSYNC_E2E_PG_BIN`). When unset, the Docker Compose containers are used.
+fn local_cluster(which: Server) -> Option<(String, String)> {
+    let var = match which {
+        Server::Source => "PGSYNC_E2E_SOURCE_DATADIR",
+        Server::Target => "PGSYNC_E2E_TARGET_DATADIR",
+    };
+    let datadir = std::env::var(var).ok()?;
+    let bin = std::env::var("PGSYNC_E2E_PG_BIN").unwrap_or_else(|_| "/usr/bin".into());
+    Some((datadir, bin))
+}
+
+fn container(which: Server) -> &'static str {
+    match which {
+        Server::Source => "pgsync-source",
+        Server::Target => "pgsync-target",
+    }
+}
+
+fn postmaster_pid(datadir: &str) -> i32 {
+    let pidfile =
+        std::fs::read_to_string(format!("{datadir}/postmaster.pid")).expect("postmaster.pid");
+    pidfile.lines().next().unwrap().trim().parse().unwrap()
+}
+
+/// Restart the server (`docker restart` or `pg_ctl restart -m fast`).
+pub fn restart(which: Server) {
+    match local_cluster(which) {
+        Some((datadir, bin)) => {
+            // stop + start rather than `restart`: the latter re-executes postmaster.opts,
+            // whose -D may be relative to a different working directory.
+            for args in [
+                vec!["-D", datadir.as_str(), "-m", "fast", "-w", "stop"],
+                vec!["-D", datadir.as_str(), "-w", "-l", "/dev/null", "start"],
+            ] {
+                let status = Command::new(format!("{bin}/pg_ctl"))
+                    .args(&args)
+                    .stdout(Stdio::null())
+                    .status()
+                    .expect("pg_ctl");
+                assert!(status.success(), "pg_ctl {} failed", args.last().unwrap());
+            }
+        }
+        None => docker(&["restart", container(which)]),
+    }
+}
+
+/// Freeze the server: `docker pause`, or SIGSTOP to the postmaster's process group (every
+/// backend and the walsender stop being scheduled; sockets stay open, as in a frozen VM).
+pub fn pause(which: Server) {
+    match local_cluster(which) {
+        Some((datadir, _)) => {
+            let pid = postmaster_pid(&datadir);
+            let status = Command::new("kill")
+                .args(["-STOP", &format!("-{pid}")])
+                .status()
+                .unwrap();
+            assert!(status.success(), "SIGSTOP failed");
+        }
+        None => docker(&["pause", container(which)]),
+    }
+}
+
+pub fn unpause(which: Server) {
+    match local_cluster(which) {
+        Some((datadir, _)) => {
+            let pid = postmaster_pid(&datadir);
+            let status = Command::new("kill")
+                .args(["-CONT", &format!("-{pid}")])
+                .status()
+                .unwrap();
+            assert!(status.success(), "SIGCONT failed");
+        }
+        None => docker(&["unpause", container(which)]),
+    }
 }
 
 /// Standard two-table dataset used by most scenarios.

@@ -14,7 +14,11 @@ use std::time::Duration;
 
 fn source() -> Option<(ConnectionInfo, SafetyConfig)> {
     let url = std::env::var("PGSYNC_TEST_SOURCE_URL").ok()?;
-    let safety = SafetyConfig::default();
+    // scripts/tls-lab.sh: trust the lab's private CA for its non-loopback address.
+    let safety = SafetyConfig {
+        tls_ca_file: std::env::var("PGSYNC_TLS_CA").ok(),
+        ..SafetyConfig::default()
+    };
     Some((ConnectionInfo::parse(&url, &safety).unwrap(), safety))
 }
 

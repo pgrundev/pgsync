@@ -560,7 +560,7 @@ async fn destination_paused_backpressure_then_recovers() {
     seed_accounts(&job.src, &job.schema, 50).await;
     let mut p = job.spawn(&["bootstrap"]);
     job.wait_state("STREAMING", T).await;
-    docker(&["pause", "pgsync-target"]);
+    pause(Server::Target);
     // Source keeps producing well beyond the channel limits while the target is frozen.
     let url = job.source_admin_url.clone();
     let schema = job.schema.clone();
@@ -582,7 +582,7 @@ async fn destination_paused_backpressure_then_recovers() {
         job.slot_active_pid().await.is_some(),
         "walsender dropped during backpressure"
     );
-    docker(&["unpause", "pgsync-target"]);
+    unpause(Server::Target);
     writer.await.unwrap();
     job.wait_converged(ACCOUNTS_TABLES, Duration::from_secs(120))
         .await;
@@ -599,7 +599,7 @@ async fn destination_restart_is_survived() {
     seed_accounts(&job.src, &job.schema, 20).await;
     let mut p = job.spawn(&["bootstrap"]);
     job.wait_state("STREAMING", T).await;
-    docker(&["restart", "pgsync-target"]);
+    restart(Server::Target);
     tokio::time::sleep(Duration::from_secs(3)).await;
     // Reconnect our own admin client as well.
     let tgt = connect(&job.target_url).await;
@@ -620,7 +620,7 @@ async fn source_restart_is_survived() {
     seed_accounts(&job.src, &job.schema, 20).await;
     let mut p = job.spawn(&["bootstrap"]);
     job.wait_state("STREAMING", T).await;
-    docker(&["restart", "pgsync-source"]);
+    restart(Server::Source);
     tokio::time::sleep(Duration::from_secs(4)).await;
     job.src = connect(&job.source_admin_url).await;
     mixed_dml(&job, 1).await;
@@ -1011,5 +1011,80 @@ async fn oversized_message_is_refused_without_ack_and_resumes_after_raising_the_
     let mut p = job.spawn(&["run"]);
     job.wait_converged(ACCOUNTS_TABLES, T).await;
     assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}
+
+#[tokio::test]
+async fn invalidated_slot_requires_resync_stopped_and_streaming() {
+    e2e_guard!();
+    // The source invalidates the slot once it retains more than max_slot_wal_keep_size.
+    // Both while pgsync is stopped and while it streams, the outcome must be
+    // RESYNC_REQUIRED (exit 4) with a clear reason, never a silent restart from the WAL
+    // head. Uses ALTER SYSTEM on the source (sighup parameter) and restores it after.
+    let mut job = Job::new("slotlost", ACCOUNTS_DDL, &["accounts", "events"], "", "").await;
+    seed_accounts(&job.src, &job.schema, 10).await;
+    // ALTER SYSTEM refuses to run inside a transaction block (multi-statement batches).
+    async fn keep_size(job: &Job, v: Option<&str>) {
+        let sql = match v {
+            Some(v) => format!("ALTER SYSTEM SET max_slot_wal_keep_size = '{v}'"),
+            None => "ALTER SYSTEM RESET max_slot_wal_keep_size".to_owned(),
+        };
+        job.src.execute(&sql, &[]).await.unwrap();
+        job.src
+            .execute("SELECT pg_reload_conf()", &[])
+            .await
+            .unwrap();
+    }
+    keep_size(&job, None).await;
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", T).await;
+    assert_eq!(p.terminate(), 0);
+    keep_size(&job, Some("32MB")).await;
+    // ~160 MB of WAL that the stopped consumer's slot must retain; the next checkpoint
+    // removes the segments and marks the slot lost.
+    let fill = "CREATE TABLE IF NOT EXISTS public.slot_fill (g int, pad text); \
+                INSERT INTO public.slot_fill SELECT g, repeat('s', 1000) FROM generate_series(1, 150000) g; \
+                DROP TABLE public.slot_fill; CHECKPOINT";
+    job.src.batch_execute(fill).await.unwrap();
+    let wal_status: String = job
+        .src
+        .query_one(
+            "SELECT wal_status FROM pg_replication_slots WHERE slot_name = $1",
+            &[&job.slot],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        wal_status, "lost",
+        "slot should be invalidated by the checkpoint"
+    );
+    let (code, out) = job.run(&["run"]);
+    assert_eq!(code, 4, "{out}");
+    assert!(out.contains("lost") || out.contains("invalidat"), "{out}");
+    assert_eq!(job.job_state().await.as_deref(), Some("RESYNC_REQUIRED"));
+    let (code, out) = job.run(&["status"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("RESYNC_REQUIRED") && out.contains("cleanup --yes"),
+        "{out}"
+    );
+
+    // Streaming case: re-bootstrap, then invalidate the slot under the running consumer.
+    let (code, _) = job.run(&["cleanup", "--yes"]);
+    assert_eq!(code, 0);
+    let mut p = job.spawn(&["bootstrap", "--restart-snapshot"]);
+    job.wait_state("STREAMING", T).await;
+    // Freeze the applier's progress so the slot falls behind: pause the target, fill WAL.
+    pause(Server::Target);
+    let r = job.src.batch_execute(fill).await;
+    unpause(Server::Target);
+    r.unwrap();
+    let code = p.wait();
+    keep_size(&job, None).await;
+    assert_eq!(code, 4, "{}", p.log());
+    assert_eq!(job.job_state().await.as_deref(), Some("RESYNC_REQUIRED"));
+    let (code, _) = job.run(&["run"]);
+    assert_eq!(code, 4, "must keep refusing");
     job.teardown().await;
 }

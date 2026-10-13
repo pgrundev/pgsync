@@ -45,6 +45,11 @@ pub fn from_pg(context: &str, e: tokio_postgres::Error) -> Error {
         return Error::transient(format!("{context}: connection closed"));
     }
     let s = e.to_string();
+    // tokio-postgres hides the TLS failure reason (unknown issuer, name mismatch, ...) in
+    // the source chain; surface it, and treat it as configuration, not a retryable fault.
+    if s.contains("TLS handshake") {
+        return Error::config(format!("{context}: {}", error_chain(&e)));
+    }
     // tokio-postgres wraps I/O and timeout errors without a DbError.
     let kind = if s.contains("timed out")
         || s.contains("timeout")
@@ -63,6 +68,18 @@ pub fn from_pg(context: &str, e: tokio_postgres::Error) -> Error {
         ErrorKind::Internal
     };
     Error::with_source(kind, context.to_owned(), e)
+}
+
+/// `Display` of an error followed by every `source()` in its chain.
+pub fn error_chain(e: &(dyn std::error::Error + 'static)) -> String {
+    let mut out = e.to_string();
+    let mut cur = e.source();
+    while let Some(s) = cur {
+        out.push_str(": ");
+        out.push_str(&s.to_string());
+        cur = s.source();
+    }
+    out
 }
 
 pub fn from_io(context: &str, e: std::io::Error) -> Error {
