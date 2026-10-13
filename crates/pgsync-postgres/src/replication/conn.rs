@@ -356,10 +356,14 @@ impl ReplicationConnection {
                 Backend::Msg(Message::CopyData(body)) => {
                     return Ok(body.into_bytes());
                 }
-                Backend::Msg(Message::CopyDone) => {
-                    self.mode = Mode::Idle;
+                // A shutting-down logical walsender ends the stream with CommandComplete
+                // (no CopyDone); a physical one sends CopyDone first. Both mean "reconnect".
+                Backend::Msg(Message::CopyDone)
+                | Backend::Msg(Message::CommandComplete(_))
+                | Backend::Msg(Message::ReadyForQuery(_)) => {
+                    self.mode = Mode::Closed;
                     return Err(Error::transient(format!(
-                        "{}: server ended the replication stream",
+                        "{}: server ended the replication stream (shutdown or timeline change)",
                         self.label
                     )));
                 }

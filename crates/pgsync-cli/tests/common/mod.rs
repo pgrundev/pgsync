@@ -192,14 +192,19 @@ impl Job {
     }
 
     pub async fn job_state(&self) -> Option<String> {
-        self.tgt
+        // A fresh target has no pgsync schema until the first command creates it.
+        match self
+            .tgt
             .query_opt(
                 "SELECT state FROM pgsync.job WHERE job_id = $1",
                 &[&self.job_id],
             )
             .await
-            .unwrap()
-            .map(|r| r.get(0))
+        {
+            Ok(row) => row.map(|r| r.get(0)),
+            Err(e) if e.code() == Some(&tokio_postgres::error::SqlState::UNDEFINED_TABLE) => None,
+            Err(e) => panic!("job_state: {e}"),
+        }
     }
 
     pub async fn job_row(&self) -> Option<(String, i64, String, String, Option<String>)> {
