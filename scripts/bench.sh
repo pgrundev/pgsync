@@ -135,10 +135,10 @@ T3=$(date +%s.%N)
 kill $SAMPLER 2>/dev/null || true; wait $SAMPLER 2>/dev/null || true
 kill -TERM $PID; wait $PID || true
 
-SRC_HASH=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.items t")
-TGT_HASH=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.items t")
-SRC_HASH2=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.ledger t")
-TGT_HASH2=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.ledger t")
+SRC_HASH=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(h, ',' ORDER BY b)) || ':' || sum(n) FROM (SELECT id / 100000 AS b, md5(string_agg(t::text,'|' ORDER BY id)) AS h, count(*) AS n FROM bench.items t GROUP BY 1) s")
+TGT_HASH=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(h, ',' ORDER BY b)) || ':' || sum(n) FROM (SELECT id / 100000 AS b, md5(string_agg(t::text,'|' ORDER BY id)) AS h, count(*) AS n FROM bench.items t GROUP BY 1) s")
+SRC_HASH2=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(h, ',' ORDER BY b)) || ':' || sum(n) FROM (SELECT id / 100000 AS b, md5(string_agg(t::text,'|' ORDER BY id)) AS h, count(*) AS n FROM bench.ledger t GROUP BY 1) s")
+TGT_HASH2=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(h, ',' ORDER BY b)) || ':' || sum(n) FROM (SELECT id / 100000 AS b, md5(string_agg(t::text,'|' ORDER BY id)) AS h, count(*) AS n FROM bench.ledger t GROUP BY 1) s")
 TXNS=$(psql -Atq "$TARGET_URL" -c "SELECT txns_applied FROM pgsync.job WHERE job_id='bench'")
 ROWS_APPLIED=$(grep -o '"rows_applied":[0-9]*' "$LOG" | tail -1 | cut -d: -f2 || true)
 CDC_SECS=$(echo "$T3 - $T1" | bc)

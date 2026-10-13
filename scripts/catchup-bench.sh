@@ -42,8 +42,8 @@ done
 T1=$(date +%s.%N)
 kill -TERM $PID; wait $PID || true
 SECS=$(echo "$T1 - $T0" | bc)
-A=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.ledger t")
-B=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(t::text,'|' ORDER BY id)) FROM bench.ledger t")
+A=$(psql -Atq "$ADMIN_URL" -c "SELECT md5(string_agg(h, ',' ORDER BY b)) || ':' || sum(n) FROM (SELECT id / 100000 AS b, md5(string_agg(t::text,'|' ORDER BY id)) AS h, count(*) AS n FROM bench.ledger t GROUP BY 1) s")
+B=$(psql -Atq "$TARGET_URL" -c "SELECT md5(string_agg(h, ',' ORDER BY b)) || ':' || sum(n) FROM (SELECT id / 100000 AS b, md5(string_agg(t::text,'|' ORDER BY id)) AS h, count(*) AS n FROM bench.ledger t GROUP BY 1) s")
 ROWS=$(grep -o '"rows_applied":[0-9]*' "$OUT/catchup-$STAMP.log" | tail -1 | cut -d: -f2 || true)
 TX=$(psql -Atq "$TARGET_URL" -c "SELECT txns_applied FROM pgsync.job WHERE job_id='bench'")
 python3 - "$SAMPLES" <<PY | tee "$OUT/catchup-$STAMP.json"
