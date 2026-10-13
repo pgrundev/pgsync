@@ -22,3 +22,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tokio-postgres.workspace = true
+rand.workspace = true

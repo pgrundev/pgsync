@@ -350,7 +350,7 @@ where
                 ));
             }
             let mut cp = cp;
-            if cp.state == JobState::Error {
+            if matches!(cp.state, JobState::Error | JobState::Paused) {
                 cp.state = JobState::CatchingUp;
                 cp.last_error = None;
             }

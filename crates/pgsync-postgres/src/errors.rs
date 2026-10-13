@@ -54,9 +54,7 @@ pub fn from_pg(context: &str, e: tokio_postgres::Error) -> Error {
         || s.contains("connection refused")
         || s.contains("db error: FATAL")
         || s.contains("unexpected EOF")
-    {
-        ErrorKind::Transient
-    } else if s.contains("error connecting")
+        || s.contains("error connecting")
         || s.contains("Connection refused")
         || s.contains("dns")
     {

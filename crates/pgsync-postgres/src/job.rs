@@ -336,7 +336,10 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
             )));
         }
         info!(state = %cp.state, "restarting snapshot: discarding previous copy");
-        restart_cleanup(ctx, &tgt, cp).await?;
+        restart_cleanup(ctx, &tgt, Some(cp)).await?;
+    } else if restart_snapshot {
+        info!("restarting snapshot: no job metadata; resetting target tables only");
+        restart_cleanup(ctx, &tgt, None).await?;
     }
 
     // Preflight (never modifies the source).
@@ -400,8 +403,10 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     run(ctx).await.map(|_| ())
 }
 
-async fn restart_cleanup(ctx: &JobContext, tgt: &PgClient, cp: &Checkpoint) -> Result<()> {
-    if cp.slot_owned {
+async fn restart_cleanup(ctx: &JobContext, tgt: &PgClient, cp: Option<&Checkpoint>) -> Result<()> {
+    if let Some(cp) = cp
+        && cp.slot_owned
+    {
         let src = ctx.source_client("pgsync-bootstrap").await?;
         if source::slot_info(&src, &cp.slot).await?.is_some() {
             src.execute("SELECT pg_drop_replication_slot($1)", &[&cp.slot])
@@ -419,7 +424,9 @@ async fn restart_cleanup(ctx: &JobContext, tgt: &PgClient, cp: &Checkpoint) -> R
             .await
             .map_err(|e| from_pg(&format!("reset target table {t}"), e))?;
     }
-    sink::delete_job(tgt, &cp.job_id).await?;
+    if let Some(cp) = cp {
+        sink::delete_job(tgt, &cp.job_id).await?;
+    }
     Ok(())
 }
 

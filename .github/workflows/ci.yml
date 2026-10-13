@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: lint-and-unit
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ["16", "17", "18"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install PostgreSQL client (pg_dump)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+      - name: Start source and target
+        run: PG_IMAGE=postgres:${{ matrix.pg }} docker compose up -d --wait
+      - name: Live protocol test
+        run: PGSYNC_TEST_SOURCE_URL=postgres://pgsync:pgsync@localhost:5433/app cargo test -p pgsync-postgres --test live_replication
+      - name: End-to-end scenarios
+        run: PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e cargo test -p pgsync-cli --test e2e -- --test-threads=1
+      - name: Disruptive scenarios
+        if: matrix.pg == '18'
+        run: PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e PGSYNC_E2E_CRASH_ROUNDS=8 PGSYNC_E2E_LARGE_ROWS=100000 cargo test -p pgsync-cli --test e2e -- --test-threads=1 --ignored
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose logs --tail=200
+          tail -n 100 target/e2e/*.log || true
