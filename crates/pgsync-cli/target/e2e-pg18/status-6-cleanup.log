@@ -1,0 +1,2 @@
+[2m2026-10-13T21:53:01.793342Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-status [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:53:02.422246Z[0m [31mERROR[0m [preflight] slot "slot_status" is active (pid Some(40840)); stop the consumer first

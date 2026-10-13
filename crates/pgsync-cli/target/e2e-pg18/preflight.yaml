@@ -1,0 +1,24 @@
+job:
+  id: e2e-preflight
+source:
+  url_env: E2E_SOURCE_URL
+  publication: pub_preflight
+  slot: slot_preflight
+target:
+  url_env: E2E_TARGET_URL
+replication:
+  tables:
+    - e2e_preflight.withkey
+    - e2e_preflight.nokey
+    - e2e_preflight.ri_nothing
+    - e2e_preflight.missing
+resources:
+  connection_timeout: 5s
+  feedback_interval: 1s
+  retry_backoff:
+    initial: 200ms
+    max: 2s
+
+safety:
+  monitor_interval: 2s
+

@@ -1,0 +1,4 @@
+job "e2e-status": not bootstrapped
+slot: missing on source
+source wal: 0/2A6B498  slot lag: 0 bytes  retained wal: 0 bytes
+res://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app

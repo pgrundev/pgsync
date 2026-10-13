@@ -7,13 +7,13 @@ use crate::schema::{TargetColumn, target_columns};
 use bytes::{Bytes, BytesMut};
 use futures_util::future::try_join_all;
 use pgsync_core::checkpoint::Checkpoint;
-use pgsync_core::config::quote_ident;
+use pgsync_core::config::{TableName, quote_ident};
 use pgsync_core::event::{Op, Relation, ReplicaIdentity, Tuple, Value};
 use pgsync_core::state::JobState;
 use pgsync_core::traits::ReplicationSink;
 use pgsync_core::{Error, Lsn, Result};
 use postgres_types::{IsNull, PgLsn, ToSql, Type, to_sql_checked};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use tokio_postgres::Statement;
 use tracing::{debug, warn};
@@ -109,6 +109,10 @@ pub struct PgSink {
     pending_bytes: usize,
     in_txn: bool,
     limits: SinkLimits,
+    /// `schema.table` names this job is configured to replicate. A relation outside this
+    /// set (publication changed after bootstrap, `FOR ALL TABLES`) is refused rather than
+    /// applied to a same-named target table that was never snapshotted.
+    allowed_tables: Option<BTreeSet<String>>,
 }
 
 impl PgSink {
@@ -144,7 +148,16 @@ impl PgSink {
             pending_bytes: 0,
             in_txn: false,
             limits,
+            allowed_tables: None,
         })
+    }
+
+    /// Restrict apply to the configured tables (`run` path). Without this, every
+    /// published relation that exists on the target is accepted (`status`/`cleanup` never
+    /// apply anything, so they do not need it).
+    pub fn restrict_to(mut self, tables: &[TableName]) -> Self {
+        self.allowed_tables = Some(tables.iter().map(|t| t.to_string()).collect());
+        self
     }
 
     pub fn client(&self) -> &PgClient {
@@ -590,6 +603,19 @@ impl ReplicationSink for PgSink {
     }
 
     async fn relation(&mut self, rel: Arc<Relation>) -> Result<()> {
+        if let Some(allowed) = &self.allowed_tables
+            && !allowed.contains(&rel.qualified_name())
+        {
+            // pgoutput resolves publication membership from the historic catalog, so the
+            // change stays in the stream even if the table is dropped from the publication
+            // later; without a snapshot of the table the target cannot be made consistent.
+            return Err(Error::resync_required(format!(
+                "table {} is published but not in replication.tables and was never snapshotted, \
+                 so its changes cannot be applied. Add it to replication.tables and \
+                 re-bootstrap (`cleanup --yes`, then `bootstrap --restart-snapshot`)",
+                rel.qualified_name()
+            )));
+        }
         // A relation message inside a transaction may follow pending statements for the
         // same table; flush so ordering is preserved before metadata changes.
         self.flush().await?;

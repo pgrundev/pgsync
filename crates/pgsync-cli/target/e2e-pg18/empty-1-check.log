@@ -1,0 +1,25 @@
+source:
+  [PASS] server_version               PostgreSQL 18.6 (Homebrew) on aarch64-apple-darwin23.4.0, compiled by Apple clang version 15.0.0 (clang-1500.3.9.4), 64-bit
+  [PASS] wal_level                    logical
+  [PASS] max_replication_slots        32 (0 in use)
+  [PASS] max_wal_senders              32
+  [PASS] max_slot_wal_keep_size       4GB (slot is invalidated beyond this)
+  [PASS] wal_sender_timeout           30s
+  [PASS] role                         pgsync has REPLICATION
+  [PASS] publication                  pub_empty exists
+  [PASS] publication_operations       insert, update, delete, truncate
+  [PASS] publication_tables           2 tables match replication.tables
+  [PASS] table e2e_empty.accounts     primary key (id)
+  [PASS] table e2e_empty.events       primary key (id)
+  [PASS] slot                         "slot_empty" does not exist yet; bootstrap will create it
+  [PASS] replication_connection       system 7696273405089744189 timeline 1
+  [WARN] source_tls                   plain connection (loopback)
+target:
+  [PASS] target_version               PostgreSQL 18.6 (Homebrew) on aarch64-apple-darwin23.4.0, compiled by Apple clang version 15.0.0 (clang-1500.3.9.4), 64-bit
+  [PASS] target_role                  superuser (session_replication_role = replica available)
+  [PASS] target_pgsync_schema         writable
+  [PASS] pg_dump                      pg_dump (PostgreSQL) 18.6 (Homebrew)
+  [PASS] target table e2e_empty.accounts will be created by pg_dump schema bootstrap
+  [PASS] target table e2e_empty.events will be created by pg_dump schema bootstrap
+  [WARN] target_tls                   plain connection (loopback)
+OK: prerequisites satisfied

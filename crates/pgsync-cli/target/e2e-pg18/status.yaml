@@ -1,0 +1,22 @@
+job:
+  id: e2e-status
+source:
+  url_env: E2E_SOURCE_URL
+  publication: pub_status
+  slot: slot_status
+target:
+  url_env: E2E_TARGET_URL
+replication:
+  tables:
+    - e2e_status.accounts
+    - e2e_status.events
+resources:
+  connection_timeout: 5s
+  feedback_interval: 1s
+  retry_backoff:
+    initial: 200ms
+    max: 2s
+
+safety:
+  monitor_interval: 2s
+

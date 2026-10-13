@@ -758,3 +758,66 @@ async fn idle_slot_advances_over_unpublished_wal() {
     assert_eq!(p.terminate(), 0);
     job.teardown().await;
 }
+
+#[tokio::test]
+async fn published_but_unconfigured_table_stops_visibly() {
+    e2e_guard!();
+    // Only `accounts` is configured and published. After bootstrap an operator adds a second
+    // table to the publication; a same-named table also exists on the target (never
+    // snapshotted). pgsync must refuse to apply its changes instead of diverging silently.
+    let mut job = Job::new("unconfigured", ACCOUNTS_DDL, &["accounts"], "", "").await;
+    seed_accounts(&job.src, &job.schema, 10).await;
+    let s = job.schema.clone();
+    // `events` exists on the source (referenced by ACCOUNTS_DDL) but is not published yet.
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", T).await;
+    job.tgt
+        .batch_execute(&format!(
+            "CREATE TABLE {s}.events (id bigserial PRIMARY KEY, account_id bigint NOT NULL, kind text NOT NULL, amount numeric(14,2), payload json, note text)"
+        ))
+        .await
+        .unwrap();
+    job.src
+        .batch_execute(&format!(
+            "ALTER PUBLICATION {} ADD TABLE {s}.events; \
+             INSERT INTO {s}.events (account_id, kind, note) VALUES (1, 'leak', 'must not arrive'); \
+             UPDATE {s}.accounts SET balance = balance + 1 WHERE id = 1;",
+            job.publication
+        ))
+        .await
+        .unwrap();
+    job.wait_state("RESYNC_REQUIRED", T).await;
+    assert_eq!(p.wait(), 4, "{}", p.log());
+    let (_, _, _, _, err) = job.job_row().await.unwrap();
+    let err = err.unwrap();
+    assert!(
+        err.contains(&format!("{s}.events")) && err.contains("not in replication.tables"),
+        "{err}"
+    );
+    async fn count(job: &Job) -> i64 {
+        let q = format!("SELECT count(*) FROM {}.events", job.schema);
+        job.tgt.query_one(&q, &[]).await.unwrap().get(0)
+    }
+    assert_eq!(
+        count(&job).await,
+        0,
+        "nothing may be applied to the unconfigured table"
+    );
+    // `run` keeps refusing: the change is in the slot's WAL regardless of later publication
+    // edits (membership is resolved from the historic catalog).
+    let (code, _) = job.run(&["run"]);
+    assert_eq!(code, 4);
+    assert_eq!(count(&job).await, 0);
+    // Recovery: configure the table and re-bootstrap (the target copy is dropped and
+    // recreated from a new snapshot, which now includes the row).
+    job.write_config(&["accounts", "events"], "", "");
+    let (code, out) = job.run(&["cleanup", "--yes"]);
+    assert_eq!(code, 0, "{out}");
+    let mut p = job.spawn(&["bootstrap", "--restart-snapshot"]);
+    job.wait_state("STREAMING", T).await;
+    mixed_dml(&job, 1).await;
+    job.wait_converged(ACCOUNTS_TABLES, T).await;
+    assert!(count(&job).await >= 1);
+    assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}

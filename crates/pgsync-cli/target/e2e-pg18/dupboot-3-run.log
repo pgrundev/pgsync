@@ -1,0 +1,2 @@
+[2m2026-10-13T21:52:02.636329Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-dupboot [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:52:03.000592Z[0m [31mERROR[0m [preflight] job "e2e-dupboot" is in state SNAPSHOTTING and cannot be resumed

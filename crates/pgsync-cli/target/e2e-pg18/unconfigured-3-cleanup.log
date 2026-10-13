@@ -1,0 +1,3 @@
+dropped replication slot "slot_unconfigured" on the source
+deleted job "e2e-unconfigured" metadata from the target (data tables kept)
+/pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app

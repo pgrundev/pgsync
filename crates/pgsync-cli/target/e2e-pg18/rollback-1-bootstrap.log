@@ -1,0 +1,13 @@
+[2m2026-10-13T21:53:15.385598Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-rollback [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:53:17.387775Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_rollback [3mconsistent_point[0m[2m=[0m0/2B181E0 [3msnapshot[0m[2m=[0m0000009B-00000006-1
+[2m2026-10-13T21:53:17.598127Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3105
+[2m2026-10-13T21:53:17.624872Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:53:19.281695Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_rollback.accounts [3mrows[0m[2m=[0m30 [3mbytes[0m[2m=[0m4295
+[2m2026-10-13T21:53:19.409273Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_rollback.events [3mrows[0m[2m=[0m90 [3mbytes[0m[2m=[0m3115
+[2m2026-10-13T21:53:19.409801Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m120 [3mbytes[0m[2m=[0m7410 [3mseconds[0m[2m=[0m"2.0" [3mmb_per_s[0m[2m=[0m"0.0"
+[2m2026-10-13T21:53:19.412285Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/2B181E0
+[2m2026-10-13T21:53:19.777116Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_rollback [3mfrom[0m[2m=[0m0/2B181E0 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/2B181E0))
+[2m2026-10-13T21:53:19.777175Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/2B181E0 [3macked[0m[2m=[0m0/2B181E0 [3mserver_wal_end[0m[2m=[0m0/2B181E0 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:53:19.778917Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/2B181E0
+[2m2026-10-13T21:53:20.175994Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
+[2m2026-10-13T21:53:20.177727Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/2B21380 [3macked[0m[2m=[0m0/2B21380

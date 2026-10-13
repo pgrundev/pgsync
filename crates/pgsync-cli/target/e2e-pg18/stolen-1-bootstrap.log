@@ -1,0 +1,13 @@
+[2m2026-10-13T21:52:37.618796Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-stolen [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:52:39.722317Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_stolen [3mconsistent_point[0m[2m=[0m0/292D350 [3msnapshot[0m[2m=[0m00000084-00000005-1
+[2m2026-10-13T21:52:39.978319Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3057
+[2m2026-10-13T21:52:39.988764Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:52:41.037983Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_stolen.accounts [3mrows[0m[2m=[0m0 [3mbytes[0m[2m=[0m0
+[2m2026-10-13T21:52:41.306060Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_stolen.events [3mrows[0m[2m=[0m0 [3mbytes[0m[2m=[0m0
+[2m2026-10-13T21:52:41.306208Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m0 [3mbytes[0m[2m=[0m0 [3mseconds[0m[2m=[0m"1.6" [3mmb_per_s[0m[2m=[0m"0.0"
+[2m2026-10-13T21:52:41.308594Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/292D350
+[2m2026-10-13T21:52:42.211033Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_stolen [3mfrom[0m[2m=[0m0/292D350 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/292D350))
+[2m2026-10-13T21:52:42.211127Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/292D350 [3macked[0m[2m=[0m0/292D350 [3mserver_wal_end[0m[2m=[0m0/292D350 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:52:42.214086Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/292D350
+[2m2026-10-13T21:52:42.372783Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
+[2m2026-10-13T21:52:42.387275Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/292D350 [3macked[0m[2m=[0m0/292D350

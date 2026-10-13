@@ -86,20 +86,22 @@ pub struct PgSinkFactory {
     pub timeout: Duration,
     pub max_batch_rows: usize,
     pub max_batch_bytes: usize,
+    pub tables: Vec<TableName>,
 }
 
 impl SinkFactory for PgSinkFactory {
     type Sink = PgSink;
     async fn connect(&mut self) -> Result<PgSink> {
         let c = client::connect(&self.target, &self.safety, self.timeout, "pgsync-apply").await?;
-        PgSink::new(
+        Ok(PgSink::new(
             c,
             SinkLimits {
                 max_batch_rows: self.max_batch_rows,
                 max_batch_bytes: self.max_batch_bytes,
             },
         )
-        .await
+        .await?
+        .restrict_to(&self.tables))
     }
 }
 
@@ -657,6 +659,7 @@ pub async fn run(ctx: &JobContext) -> Result<Checkpoint> {
             timeout: ctx.timeout(),
             max_batch_rows: cfg.resources.max_batch_rows,
             max_batch_bytes: cfg.resources.max_batch_bytes as usize,
+            tables: cfg.replication.tables.clone(),
         },
         &cfg.resources,
         ctx.metrics.clone(),

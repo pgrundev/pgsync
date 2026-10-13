@@ -1,0 +1,50 @@
+{
+  "job": {
+    "job_id": "e2e-status",
+    "state": "STREAMING",
+    "source_system_id": "7696273405089744189",
+    "source_dbname": "app",
+    "slot": "slot_status",
+    "publication": "pub_status",
+    "slot_owned": true,
+    "consistent_point": "0/2A6B4D0",
+    "commit_lsn": "0/2A6B4D0",
+    "committed_lsn": "0/2A6B4D0",
+    "acked_lsn": "0/2A6B4D0",
+    "last_xid": null,
+    "last_commit_ts": null,
+    "txns_applied": 0,
+    "last_error": null
+  },
+  "slot": {
+    "slot_name": "slot_status",
+    "plugin": "pgoutput",
+    "slot_type": "logical",
+    "database": "app",
+    "active": true,
+    "active_pid": 40840,
+    "restart_lsn": "0/2A6B498",
+    "confirmed_flush_lsn": "0/2A6B4D0",
+    "wal_status": "reserved",
+    "safe_wal_size": 4300819248,
+    "invalidation_reason": null,
+    "inactive_since": null
+  },
+  "source_wal_lsn": "0/2A6B4D0",
+  "slot_lag_bytes": 0,
+  "retained_wal_bytes": 56,
+  "tables": [
+    {
+      "table": "e2e_status.accounts",
+      "state": "COPIED",
+      "rows_copied": 0,
+      "bytes_copied": 0
+    },
+    {
+      "table": "e2e_status.events",
+      "state": "COPIED",
+      "rows_copied": 0,
+      "bytes_copied": 0
+    }
+  ]
+}

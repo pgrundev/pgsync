@@ -1,0 +1,2 @@
+[2m2026-10-13T21:52:29.190326Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-noslot [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:52:29.876067Z[0m [31mERROR[0m [resync_required] job "e2e-noslot" is in state RESYNC_REQUIRED and cannot be resumed

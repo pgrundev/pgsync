@@ -1,0 +1,16 @@
+[2m2026-10-13T21:53:10.025086Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-tgtdisc [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:53:11.174338Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_tgtdisc [3mconsistent_point[0m[2m=[0m0/2A8C970 [3msnapshot[0m[2m=[0m00000097-00000006-1
+[2m2026-10-13T21:53:11.300378Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3081
+[2m2026-10-13T21:53:11.306908Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:53:13.363857Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_tgtdisc.accounts [3mrows[0m[2m=[0m20 [3mbytes[0m[2m=[0m2852
+[2m2026-10-13T21:53:14.068878Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_tgtdisc.events [3mrows[0m[2m=[0m60 [3mbytes[0m[2m=[0m2041
+[2m2026-10-13T21:53:14.069920Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m80 [3mbytes[0m[2m=[0m4893 [3mseconds[0m[2m=[0m"2.9" [3mmb_per_s[0m[2m=[0m"0.0"
+[2m2026-10-13T21:53:14.074922Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/2A8C970
+[2m2026-10-13T21:53:14.460736Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_tgtdisc [3mfrom[0m[2m=[0m0/2A8C970 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/2A8C970))
+[2m2026-10-13T21:53:14.460776Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/2A8C970 [3macked[0m[2m=[0m0/2A8C970 [3mserver_wal_end[0m[2m=[0m0/2AF0B40 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:53:14.462295Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/2AF0B40
+[2m2026-10-13T21:53:14.623548Z[0m [33m WARN[0m transient failure; reconnecting [3merror[0m[2m=[0m[transient] BEGIN on target: connection closed [3mattempt[0m[2m=[0m1 [3mdelay_ms[0m[2m=[0m200
+[2m2026-10-13T21:53:15.195343Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_tgtdisc [3mfrom[0m[2m=[0m0/2A8C970 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/2AF0B40))
+[2m2026-10-13T21:53:15.195511Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/2A8C970 [3macked[0m[2m=[0m0/2AF0B40 [3mserver_wal_end[0m[2m=[0m0/2AF49C0 [3mstate[0m[2m=[0mSTREAMING
+[2m2026-10-13T21:53:15.284767Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
+[2m2026-10-13T21:53:15.285167Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/2AF49C0 [3macked[0m[2m=[0m0/2AF49C0

@@ -1,0 +1,12 @@
+job e2e-status: STREAMING
+  source system   7696273405089744189 db app
+  slot            slot_status (owned: true)
+  publication     pub_status
+  consistent pt   0/2A6B4D0
+  committed lsn   0/2A6B4D0
+  acked lsn       0/2A6B4D0
+  txns applied    0
+slot: active=true wal_status=reserved confirmed_flush=0/2A6B4D0 restart=0/2A6B498 invalidation=none
+source wal: 0/2A6B4D0  slot lag: 0 bytes  retained wal: 56 bytes
+  table e2e_status.accounts              COPIED rows=0 bytes=0
+  table e2e_status.events                COPIED rows=0 bytes=0

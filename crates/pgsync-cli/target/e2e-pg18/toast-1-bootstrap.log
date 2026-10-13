@@ -1,0 +1,13 @@
+[2m2026-10-13T21:52:19.554596Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-toast [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:52:21.029590Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_toast [3mconsistent_point[0m[2m=[0m0/28ABEA8 [3msnapshot[0m[2m=[0m00000097-00000003-1
+[2m2026-10-13T21:52:21.158962Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3033
+[2m2026-10-13T21:52:21.169836Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:52:22.208295Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_toast.accounts [3mrows[0m[2m=[0m20 [3mbytes[0m[2m=[0m16003262
+[2m2026-10-13T21:52:22.368457Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_toast.events [3mrows[0m[2m=[0m20 [3mbytes[0m[2m=[0m5100362
+[2m2026-10-13T21:52:22.369411Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m40 [3mbytes[0m[2m=[0m21103624 [3mseconds[0m[2m=[0m"1.3" [3mmb_per_s[0m[2m=[0m"15.9"
+[2m2026-10-13T21:52:22.371679Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/28ABEA8
+[2m2026-10-13T21:52:22.740204Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_toast [3mfrom[0m[2m=[0m0/28ABEA8 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/28ABEA8))
+[2m2026-10-13T21:52:22.740374Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/28ABEA8 [3macked[0m[2m=[0m0/28ABEA8 [3mserver_wal_end[0m[2m=[0m0/28ABEA8 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:52:22.742627Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/28ABEA8
+[2m2026-10-13T21:52:23.212926Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
+[2m2026-10-13T21:52:23.213739Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/28C6258 [3macked[0m[2m=[0m0/28C6258

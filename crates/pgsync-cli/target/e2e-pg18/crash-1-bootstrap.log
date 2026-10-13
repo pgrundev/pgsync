@@ -1,0 +1,11 @@
+[2m2026-10-13T21:52:06.789290Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-crash [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:52:07.450629Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_crash [3mconsistent_point[0m[2m=[0m0/1D04430 [3msnapshot[0m[2m=[0m0000008B-00000003-1
+[2m2026-10-13T21:52:07.494385Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3033
+[2m2026-10-13T21:52:07.498746Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:52:07.815519Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_crash.accounts [3mrows[0m[2m=[0m100 [3mbytes[0m[2m=[0m14310
+[2m2026-10-13T21:52:07.877318Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_crash.events [3mrows[0m[2m=[0m300 [3mbytes[0m[2m=[0m11243
+[2m2026-10-13T21:52:07.877409Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m400 [3mbytes[0m[2m=[0m25553 [3mseconds[0m[2m=[0m"0.4" [3mmb_per_s[0m[2m=[0m"0.1"
+[2m2026-10-13T21:52:07.878022Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/1D04430
+[2m2026-10-13T21:52:08.029749Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_crash [3mfrom[0m[2m=[0m0/1D04430 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/1D04430))
+[2m2026-10-13T21:52:08.029782Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/1D04430 [3macked[0m[2m=[0m0/1D04430 [3mserver_wal_end[0m[2m=[0m0/1D04430 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:52:08.031059Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/1D04430
