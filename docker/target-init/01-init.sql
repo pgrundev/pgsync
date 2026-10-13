@@ -1,0 +1,1 @@
+-- Target starts empty. PGSync bootstraps the schema and its own `pgsync` metadata schema.

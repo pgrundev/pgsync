@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pgsync-core",
+    "crates/pgsync-postgres",
+    "crates/pgsync-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+repository = "https://github.com/pgrun/pgsync"
+publish = false
+
+[workspace.dependencies]
+pgsync-core = { path = "crates/pgsync-core" }
+pgsync-postgres = { path = "crates/pgsync-postgres" }
+
+anyhow = "1.0.104"
+bytes = "1.12.1"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+postgres-protocol = "0.6.12"
+postgres-types = "0.2.14"
+rustls = { version = "0.23.45", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-native-certs = "0.8.4"
+rustls-pemfile = "2.2.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_yaml_ng = "0.10.0"
+thiserror = "2.0.21"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync", "signal", "process", "fs"] }
+tokio-postgres = { version = "0.7.18", features = ["with-uuid-1", "with-serde_json-1"] }
+tokio-postgres-rustls = "0.14.0"
+tokio-rustls = { version = "0.26.6", default-features = false }
+tokio-util = { version = "0.7.20", features = ["rt"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json", "fmt"] }
+uuid = { version = "1.28.0", features = ["v4", "serde"] }
+url = "2.5"
+rand = "0.9"
+sha2 = "0.10"
+hex = "0.4"
+
+[profile.release]
+debug = 1
+lto = "thin"
+codegen-units = 4

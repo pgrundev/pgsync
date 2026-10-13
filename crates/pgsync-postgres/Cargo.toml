@@ -1,0 +1,29 @@
+[package]
+name = "pgsync-postgres"
+description = "PGSync PostgreSQL adapter: replication protocol client, pgoutput decoder, snapshot reader, sink"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pgsync-core.workspace = true
+bytes.workspace = true
+postgres-protocol.workspace = true
+postgres-types.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
+rustls-pemfile.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-postgres.workspace = true
+tokio-postgres-rustls.workspace = true
+tokio-rustls.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+rand.workspace = true

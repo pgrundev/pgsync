@@ -1,0 +1,1 @@
+//! PGSync PostgreSQL adapter.

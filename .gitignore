@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+/docker/certs/*.key
+/docker/certs/*.crt
+/bench-results/*.json
+.env
+.DS_Store
