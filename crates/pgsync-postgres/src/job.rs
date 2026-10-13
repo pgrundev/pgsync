@@ -76,6 +76,7 @@ impl JobContext {
             timeout: self.timeout(),
             slot: self.config.source.slot.clone(),
             publication: self.config.source.publication.clone(),
+            max_message_bytes: self.config.resources.effective_max_message_bytes() as usize,
         }
     }
 }

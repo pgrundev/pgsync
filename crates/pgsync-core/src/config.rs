@@ -100,6 +100,11 @@ pub struct ResourcesConfig {
     pub channel_capacity: usize,
     pub max_batch_rows: usize,
     pub max_batch_bytes: u64,
+    /// Largest single replication message accepted from the server (one row change can be
+    /// up to 1 GB in PostgreSQL). Larger messages stop the job with a `resource` error
+    /// before anything is buffered; nothing is acknowledged. `None` derives a value from
+    /// the remaining memory budget, capped at 32 MiB.
+    pub max_message_bytes: Option<u64>,
     pub max_parallel_copies: usize,
     #[serde(with = "duration_text")]
     pub connection_timeout: Duration,
@@ -120,6 +125,7 @@ impl Default for ResourcesConfig {
             channel_capacity: 4096,
             max_batch_rows: 500,
             max_batch_bytes: 4 * 1024 * 1024,
+            max_message_bytes: None,
             max_parallel_copies: 2,
             connection_timeout: Duration::from_secs(10),
             retry_backoff: RetryBackoff::default(),
@@ -140,6 +146,31 @@ pub struct RetryBackoff {
     pub multiplier: f64,
     /// `0` means retry forever.
     pub max_attempts: u32,
+}
+
+pub const MAX_MESSAGE_BYTES_CAP: u64 = 32 * 1024 * 1024;
+
+impl ResourcesConfig {
+    /// Memory reserved for channel, batch and COPY buffers.
+    pub fn fixed_budget_bytes(&self) -> u64 {
+        self.max_inflight_bytes
+            + self.max_batch_bytes
+            + (self.max_parallel_copies as u64) * 2 * self.buffer_size_kb * 1024
+    }
+
+    /// Effective message limit: the configured value, or half of what the budget leaves
+    /// after the fixed buffers (a message is held twice while it is applied: decoded and
+    /// serialised as statement parameters), capped at 32 MiB and never below 1 MiB.
+    pub fn effective_max_message_bytes(&self) -> u64 {
+        match self.max_message_bytes {
+            Some(v) => v,
+            None => {
+                let budget = self.memory_budget_mb * 1024 * 1024;
+                let spare = budget.saturating_sub(self.fixed_budget_bytes()) / 2;
+                spare.clamp(1024 * 1024, MAX_MESSAGE_BYTES_CAP)
+            }
+        }
+    }
 }
 
 impl Default for RetryBackoff {
@@ -355,14 +386,23 @@ impl Config {
             return bad("resources.max_parallel_copies must be between 1 and 64".into());
         }
         let budget = r.memory_budget_mb * 1024 * 1024;
-        let needed = r.max_inflight_bytes
-            + r.max_batch_bytes
-            + (r.max_parallel_copies as u64) * 2 * r.buffer_size_kb * 1024;
+        let needed = r.fixed_budget_bytes();
         if needed > budget {
             return bad(format!(
                 "resources.memory_budget_mb ({} MiB) is smaller than max_inflight_bytes + max_batch_bytes + copy buffers ({} bytes)",
                 r.memory_budget_mb, needed
             ));
+        }
+        if let Some(m) = r.max_message_bytes {
+            if m < 64 * 1024 {
+                return bad("resources.max_message_bytes must be at least 65536".into());
+            }
+            if needed + 2 * m > budget {
+                return bad(format!(
+                    "resources.memory_budget_mb ({} MiB) cannot hold the fixed buffers ({} bytes) plus two copies of a max_message_bytes message ({} bytes)",
+                    r.memory_budget_mb, needed, m
+                ));
+            }
         }
         if r.connection_timeout.is_zero() {
             return bad("resources.connection_timeout must be positive".into());
@@ -552,6 +592,26 @@ safety:
             let err = Config::from_yaml(&yaml).expect_err(&format!("should reject: {expect}"));
             assert!(err.message().contains(expect), "{expect}: got {err}");
         }
+    }
+
+    #[test]
+    fn message_limit_is_derived_from_the_budget_or_validated() {
+        let c = Config::from_yaml(MINIMAL).unwrap();
+        // 128 MiB - (16 + 4 + 1) MiB = 107 MiB, half is 53.5 MiB, capped at 32 MiB.
+        assert_eq!(c.resources.effective_max_message_bytes(), 32 * 1024 * 1024);
+        let c =
+            Config::from_yaml(&format!("{MINIMAL}\nresources:\n  memory_budget_mb: 24\n")).unwrap();
+        assert_eq!(c.resources.effective_max_message_bytes(), 1536 * 1024);
+        let c = Config::from_yaml(&format!(
+            "{MINIMAL}\nresources:\n  max_message_bytes: 8388608\n"
+        ))
+        .unwrap();
+        assert_eq!(c.resources.effective_max_message_bytes(), 8 * 1024 * 1024);
+        let err = Config::from_yaml(&format!(
+            "{MINIMAL}\nresources:\n  max_message_bytes: 67108864\n"
+        ))
+        .unwrap_err();
+        assert!(err.message().contains("two copies"), "{err}");
     }
 
     #[test]

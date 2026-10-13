@@ -9,6 +9,7 @@ use std::sync::Arc;
 pub fn client_config(
     policy: TlsPolicy,
     safety: &SafetyConfig,
+    url_ca_file: Option<&str>,
 ) -> Result<Arc<rustls::ClientConfig>> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = rustls::ClientConfig::builder_with_provider(provider.clone())
@@ -21,10 +22,14 @@ pub fn client_config(
         for cert in native.certs {
             let _ = roots.add(cert);
         }
-        if let Some(path) = &safety.tls_ca_file {
-            let pem = std::fs::read(path).map_err(|e| {
-                Error::config(format!("cannot read safety.tls_ca_file {path}: {e}"))
-            })?;
+        for path in safety
+            .tls_ca_file
+            .iter()
+            .map(String::as_str)
+            .chain(url_ca_file)
+        {
+            let pem = std::fs::read(path)
+                .map_err(|e| Error::config(format!("cannot read CA file {path}: {e}")))?;
             let mut added = 0;
             for cert in rustls_pemfile::certs(&mut pem.as_slice()) {
                 let cert =
@@ -36,7 +41,7 @@ pub fn client_config(
             }
             if added == 0 {
                 return Err(Error::config(format!(
-                    "no certificates found in safety.tls_ca_file {path}"
+                    "no certificates found in CA file {path}"
                 )));
             }
         }

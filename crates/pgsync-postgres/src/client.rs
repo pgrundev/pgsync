@@ -56,7 +56,7 @@ pub async fn connect(
                     TlsPolicy::Required { .. } => tokio_postgres::config::SslMode::Require,
                     _ => tokio_postgres::config::SslMode::Prefer,
                 });
-                let tls_config = tls::client_config(info.tls, safety)?;
+                let tls_config = tls::client_config(info.tls, safety, info.tls_ca_file.as_deref())?;
                 let connector =
                     tokio_postgres_rustls::MakeRustlsConnect::new((*tls_config).clone());
                 let (client, conn) = config

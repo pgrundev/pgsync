@@ -15,11 +15,16 @@ use tracing::{debug, info};
 
 pub struct PgEventStream {
     conn: ReplicationConnection,
+    /// Bound on one feedback write; a peer that stops reading is treated as gone.
+    write_timeout: Duration,
 }
 
 impl PgEventStream {
-    pub fn new(conn: ReplicationConnection) -> Self {
-        PgEventStream { conn }
+    pub fn new(conn: ReplicationConnection, write_timeout: Duration) -> Self {
+        PgEventStream {
+            conn,
+            write_timeout,
+        }
     }
 
     pub async fn close(self) {
@@ -126,7 +131,13 @@ impl EventStream for PgEventStream {
             now_pg_micros(),
             fb.reply_requested,
         );
-        self.conn.send_copy_data(&payload).await
+        match tokio::time::timeout(self.write_timeout, self.conn.send_copy_data(&payload)).await {
+            Ok(r) => r,
+            Err(_) => Err(Error::transient(format!(
+                "feedback write did not complete within {:?}; source not reading",
+                self.write_timeout
+            ))),
+        }
     }
 }
 
@@ -137,6 +148,7 @@ pub struct PgStreamFactory {
     pub timeout: Duration,
     pub slot: String,
     pub publication: String,
+    pub max_message_bytes: usize,
 }
 
 impl StreamFactory for PgStreamFactory {
@@ -145,6 +157,7 @@ impl StreamFactory for PgStreamFactory {
     async fn connect(&mut self, cp: &Checkpoint) -> Result<(PgEventStream, Lsn)> {
         let mut conn =
             ReplicationConnection::connect(&self.info, &self.safety, self.timeout).await?;
+        conn.set_max_message_bytes(self.max_message_bytes);
         let sys = identify_system(&mut conn).await?;
         if sys.system_id != cp.source_system_id {
             return Err(Error::resync_required(format!(
@@ -168,7 +181,7 @@ impl StreamFactory for PgStreamFactory {
         let cmd = start_replication_command(&self.slot, cp.committed_lsn, &self.publication);
         conn.start_replication(&cmd).await?;
         info!(slot = %self.slot, from = %cp.committed_lsn, confirmed_flush = ?slot.confirmed_flush_lsn, "START_REPLICATION accepted");
-        Ok((PgEventStream::new(conn), sys.xlogpos))
+        Ok((PgEventStream::new(conn, self.timeout), sys.xlogpos))
     }
 }
 

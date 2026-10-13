@@ -56,6 +56,9 @@ pub struct ReplicationConnection {
     mode: Mode,
     label: String,
     pub server_version: Option<String>,
+    /// Largest backend message accepted (`resources.max_message_bytes`). Enforced before
+    /// the message is buffered, so memory never silently exceeds the budget.
+    max_message_bytes: usize,
 }
 
 enum Backend {
@@ -100,7 +103,7 @@ impl ReplicationConnection {
                 .map_err(|e| from_io(label, e))?;
             match (answer[0], info.tls) {
                 (b'S', _) => {
-                    let config = tls::client_config(info.tls, safety)?;
+                    let config = tls::client_config(info.tls, safety, info.tls_ca_file.as_deref())?;
                     let connector = tokio_rustls::TlsConnector::from(config);
                     let name = tls::server_name(&info.host)?;
                     let stream = connector.connect(name, tcp).await.map_err(|e| {
@@ -141,6 +144,7 @@ impl ReplicationConnection {
             mode: Mode::Idle,
             label: label.to_owned(),
             server_version: None,
+            max_message_bytes: usize::MAX,
         };
         conn.startup(info).await?;
         Ok(conn)
@@ -259,6 +263,11 @@ impl ReplicationConnection {
                 other => return Err(self.unexpected(other, "ReadyForQuery")),
             }
         }
+    }
+
+    /// Refuse backend messages larger than `bytes` (see `resources.max_message_bytes`).
+    pub fn set_max_message_bytes(&mut self, bytes: usize) {
+        self.max_message_bytes = bytes.max(1024);
     }
 
     fn need_password() -> Error {
@@ -439,6 +448,17 @@ impl ReplicationConnection {
                         self.label
                     )));
                 }
+                if len + 1 > self.max_message_bytes {
+                    self.mode = Mode::Closed;
+                    return Err(Error::resource(format!(
+                        "{}: server sent a {} byte message, above resources.max_message_bytes ({}); \
+                         nothing was acknowledged. Raise the limit (and memory_budget_mb if needed) \
+                         and `run` to apply the transaction",
+                        self.label,
+                        len + 1,
+                        self.max_message_bytes
+                    )));
+                }
                 if self.read_buf.len() > len {
                     if tag == COPY_BOTH_RESPONSE_TAG {
                         self.read_buf.advance(len + 1);
@@ -480,7 +500,7 @@ impl ReplicationConnection {
 
     fn db_error(&self, fields: postgres_protocol::message::backend::ErrorFields<'_>) -> Error {
         let (code, message, detail) = collect_error_fields(fields);
-        let kind = kind_for_sqlstate(&code);
+        let kind = stream_error_kind(&code, &message);
         let mut msg = format!("{}: {message} (SQLSTATE {code})", self.label);
         if let Some(d) = detail {
             msg.push_str(&format!(": {d}"));
@@ -506,6 +526,22 @@ impl ReplicationConnection {
         frontend::terminate(&mut buf);
         let _ = self.io.write_all(&buf).await;
         let _ = self.io.shutdown().await;
+    }
+}
+
+/// Errors on the replication connection that mean the slot can no longer deliver every
+/// transaction: the slot was invalidated (`max_slot_wal_keep_size`) or its WAL is gone.
+/// Both need a resynchronisation, not a retry.
+pub fn stream_error_kind(code: &str, message: &str) -> ErrorKind {
+    match code {
+        // object_not_in_prerequisite_state: "can no longer get changes from replication
+        // slot ... This slot has been invalidated because ..."
+        "55000" if message.contains("replication slot") || message.contains("invalidated") => {
+            ErrorKind::ResyncRequired
+        }
+        // undefined_file: "requested WAL segment ... has already been removed"
+        "58P01" => ErrorKind::ResyncRequired,
+        _ => kind_for_sqlstate(code),
     }
 }
 
@@ -548,5 +584,40 @@ fn message_name(m: &Message) -> &'static str {
         Message::ReadyForQuery(_) => "ReadyForQuery",
         Message::RowDescription(_) => "RowDescription",
         _ => "other",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalidated_slot_and_removed_wal_need_resync() {
+        assert_eq!(
+            stream_error_kind(
+                "55000",
+                "can no longer get changes from replication slot \"s\""
+            ),
+            ErrorKind::ResyncRequired
+        );
+        assert_eq!(
+            stream_error_kind(
+                "58P01",
+                "requested WAL segment 000000010000000000000003 has already been removed"
+            ),
+            ErrorKind::ResyncRequired
+        );
+        assert_eq!(
+            stream_error_kind("55006", "replication slot \"s\" is active for PID 1"),
+            ErrorKind::Transient
+        );
+        assert_eq!(
+            stream_error_kind("55000", "something else"),
+            ErrorKind::Internal
+        );
+        assert_eq!(
+            stream_error_kind("57P01", "terminating connection"),
+            ErrorKind::Transient
+        );
     }
 }

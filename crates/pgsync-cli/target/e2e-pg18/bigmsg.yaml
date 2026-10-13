@@ -1,0 +1,22 @@
+job:
+  id: e2e-bigmsg
+source:
+  url_env: E2E_SOURCE_URL
+  publication: pub_bigmsg
+  slot: slot_bigmsg
+target:
+  url_env: E2E_TARGET_URL
+replication:
+  tables:
+    - e2e_bigmsg.accounts
+    - e2e_bigmsg.events
+resources:
+  connection_timeout: 5s
+  feedback_interval: 1s
+  retry_backoff:
+    initial: 200ms
+    max: 2s
+  max_message_bytes: 1048576
+safety:
+  monitor_interval: 2s
+

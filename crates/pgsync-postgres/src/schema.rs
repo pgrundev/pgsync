@@ -52,8 +52,16 @@ pub async fn dump_schema(
         TlsPolicy::Required { verify: false } => "require",
     };
     cmd.env("PGSSLMODE", sslmode);
-    if let Some(ca) = &safety.tls_ca_file {
-        cmd.env("PGSSLROOTCERT", ca);
+    // libpq defaults to ~/.postgresql/root.crt, not the system store; `system` (libpq 16+)
+    // matches what pgsync itself trusts when no CA file is configured.
+    let root = safety
+        .tls_ca_file
+        .as_deref()
+        .or(info.tls_ca_file.as_deref())
+        .unwrap_or("system");
+    // libpq refuses sslrootcert=system with sslmode=prefer, so only set it when verifying.
+    if matches!(info.tls, TlsPolicy::Required { verify: true }) {
+        cmd.env("PGSSLROOTCERT", root);
     }
     cmd.stdin(std::process::Stdio::null());
     let out = cmd.output().await.map_err(|e| {

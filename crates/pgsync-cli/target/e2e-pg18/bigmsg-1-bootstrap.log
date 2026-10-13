@@ -1,0 +1,5 @@
+[2m2026-10-13T22:03:00.690321Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-bigmsg [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T22:03:01.604930Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_bigmsg [3mconsistent_point[0m[2m=[0m0/828FDB8 [3msnapshot[0m[2m=[0m0000009A-00000008-1
+[2m2026-10-13T22:03:01.782592Z[0m [32m INFO[0m dropped replication slot owned by this job (its snapshot failed) [3mslot[0m[2m=[0mslot_bigmsg
+[2m2026-10-13T22:03:01.782678Z[0m [31mERROR[0m snapshot failed; job stays in SNAPSHOTTING and needs `bootstrap --restart-snapshot` [3merror[0m[2m=[0m[preflight] pg_dump failed (exit status: 1): pg_dump: error: weak sslmode "prefer" may not be used with sslrootcert=system (use "verify-full")
+[2m2026-10-13T22:03:01.783864Z[0m [31mERROR[0m [preflight] pg_dump failed (exit status: 1): pg_dump: error: weak sslmode "prefer" may not be used with sslrootcert=system (use "verify-full")

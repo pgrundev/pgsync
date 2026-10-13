@@ -68,6 +68,7 @@ async fn replication_connection_streams_an_insert() {
         timeout,
         slot: slot.into(),
         publication: "pgsync_demo".into(),
+        max_message_bytes: 32 * 1024 * 1024,
     };
     let (mut stream, wal_end) = factory.connect(&cp).await.unwrap();
     assert!(wal_end >= created.consistent_point);

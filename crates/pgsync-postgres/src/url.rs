@@ -39,6 +39,95 @@ pub struct ConnectionInfo {
     pub dbname: String,
     pub tls: TlsPolicy,
     pub is_loopback: bool,
+    /// `sslrootcert=<path>` from the URL, trusted in addition to `safety.tls_ca_file`.
+    pub tls_ca_file: Option<String>,
+}
+
+/// libpq parameters that tokio-postgres does not know. Verification modes collapse to
+/// `require` because pgsync always verifies the chain and host name for non-loopback hosts;
+/// `sslrootcert` is honoured; parameters that would silently weaken or change the
+/// connection are refused; the rest are ignored.
+struct Normalised {
+    url: String,
+    tls_ca_file: Option<String>,
+}
+
+fn normalise_url(url: &str) -> Result<Normalised> {
+    let Ok(mut parsed) = url::Url::parse(url) else {
+        // key=value form, or something tokio-postgres will reject with its own message.
+        return Ok(Normalised {
+            url: url.to_owned(),
+            tls_ca_file: None,
+        });
+    };
+    if !matches!(parsed.scheme(), "postgres" | "postgresql") {
+        return Ok(Normalised {
+            url: url.to_owned(),
+            tls_ca_file: None,
+        });
+    }
+    let mut tls_ca_file = None;
+    let mut kept: Vec<(String, String)> = Vec::new();
+    for (k, v) in parsed.query_pairs() {
+        let (k, v) = (k.into_owned(), v.into_owned());
+        match k.as_str() {
+            "sslmode" => {
+                let mapped = match v.as_str() {
+                    "verify-full" | "verify-ca" => "require",
+                    "allow" => "prefer",
+                    other => other,
+                };
+                kept.push((k, mapped.to_owned()));
+            }
+            "sslrootcert" => {
+                if v != "system" {
+                    tls_ca_file = Some(v);
+                }
+            }
+            "sslcert" | "sslkey" | "sslpassword" => {
+                return Err(Error::config(format!(
+                    "connection URL parameter {k} is not supported: client certificate \
+                     authentication is not available in this version of pgsync"
+                )));
+            }
+            "sslcrl" | "sslcrldir" => {
+                return Err(Error::config(format!(
+                    "connection URL parameter {k} is not supported (certificate revocation \
+                     lists are not checked); remove it or use safety.tls_ca_file with a CA \
+                     that does not need it"
+                )));
+            }
+            "passfile" | "service" | "requirepeer" => {
+                return Err(Error::config(format!(
+                    "connection URL parameter {k} is not supported; put the password in the URL \
+                     held by the environment variable"
+                )));
+            }
+            // Harmless libpq knobs with no equivalent here.
+            "sslcompression"
+            | "sslsni"
+            | "sslcertmode"
+            | "gssencmode"
+            | "krbsrvname"
+            | "gsslib"
+            | "ssl_min_protocol_version"
+            | "ssl_max_protocol_version"
+            | "client_encoding"
+            | "fallback_application_name" => {}
+            _ => kept.push((k, v)),
+        }
+    }
+    parsed.set_query(None);
+    if !kept.is_empty() {
+        let mut q = parsed.query_pairs_mut();
+        for (k, v) in &kept {
+            q.append_pair(k, v);
+        }
+    }
+    Ok(Normalised {
+        url: parsed.to_string(),
+        tls_ca_file,
+    })
 }
 
 impl std::fmt::Debug for ConnectionInfo {
@@ -60,7 +149,8 @@ impl ConnectionInfo {
     }
 
     pub fn parse(url: &str, safety: &SafetyConfig) -> Result<Self> {
-        let config = tokio_postgres::Config::from_str(url)
+        let normalised = normalise_url(url)?;
+        let config = tokio_postgres::Config::from_str(&normalised.url)
             .map_err(|e| Error::config(format!("invalid connection URL: {e}")))?;
         let hosts = config.get_hosts();
         if hosts.len() != 1 {
@@ -110,6 +200,7 @@ impl ConnectionInfo {
             dbname,
             tls,
             is_loopback,
+            tls_ca_file: normalised.tls_ca_file,
         })
     }
 
@@ -188,6 +279,45 @@ mod tests {
         )
         .unwrap();
         assert_eq!(i.tls, TlsPolicy::Required { verify: false });
+    }
+
+    #[test]
+    fn libpq_tls_parameters_are_normalised() {
+        // verify-full / verify-ca collapse to require (pgsync always verifies remote hosts).
+        let i = ConnectionInfo::parse(
+            "postgres://u:p@db.example.com:5432/db?sslmode=verify-full&sslrootcert=/etc/ca.pem&sslcompression=0",
+            &safety(true, false),
+        )
+        .unwrap();
+        assert_eq!(i.tls, TlsPolicy::Required { verify: true });
+        assert_eq!(i.tls_ca_file.as_deref(), Some("/etc/ca.pem"));
+        let i = ConnectionInfo::parse(
+            "postgresql://u:p@db.example.com/db?sslmode=verify-ca&sslrootcert=system&application_name=x",
+            &safety(true, false),
+        )
+        .unwrap();
+        assert_eq!(i.tls, TlsPolicy::Required { verify: true });
+        assert_eq!(i.tls_ca_file, None);
+        assert_eq!(i.config.get_application_name(), Some("x"));
+        // Parameters that would change the security model are refused, not ignored.
+        for p in [
+            "sslcert=/c.pem",
+            "sslkey=/k.pem",
+            "sslcrl=/crl.pem",
+            "passfile=/p",
+        ] {
+            let err = ConnectionInfo::parse(
+                &format!("postgres://u:p@db.example.com/db?{p}"),
+                &safety(true, false),
+            )
+            .unwrap_err();
+            assert!(err.message().contains("not supported"), "{p}: {err}");
+        }
+        // Unknown parameters still fail loudly.
+        assert!(
+            ConnectionInfo::parse("postgres://u:p@localhost/db?bogus=1", &safety(true, false))
+                .is_err()
+        );
     }
 
     #[test]

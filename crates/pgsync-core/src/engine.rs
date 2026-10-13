@@ -30,6 +30,9 @@ pub struct AckPosition {
     pub acked: Lsn,
 }
 
+/// How long shutdown waits for the reader task before aborting it.
+const READER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
+
 pub struct ApplyOutcome {
     pub checkpoint: Checkpoint,
 }
@@ -86,11 +89,20 @@ where
     .await;
 
     // Stop the reader regardless of why we exited, then surface the most useful error.
+    // A reader stuck in a socket write to a dead peer must not block shutdown or the
+    // reconnect: bound the wait and abort it (the connection is dropped either way).
     reader_cancel.cancel();
     rx.close();
-    let reader_result = match reader.await {
-        Ok(r) => r,
-        Err(e) => Err(Error::internal(format!("reader task panicked: {e}"))),
+    let mut reader = reader;
+    let reader_result = match tokio::time::timeout(READER_STOP_TIMEOUT, &mut reader).await {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => Err(Error::internal(format!("reader task panicked: {e}"))),
+        Err(_) => {
+            reader.abort();
+            Err(Error::transient(format!(
+                "reader did not stop within {READER_STOP_TIMEOUT:?}; dropping the source connection"
+            )))
+        }
     };
 
     let applier_err = result.err();

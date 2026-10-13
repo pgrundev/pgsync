@@ -952,3 +952,64 @@ async fn inherited_target_timeouts_do_not_stall_copy_or_apply() {
     assert_eq!(p.terminate(), 0);
     job.teardown().await;
 }
+
+#[tokio::test]
+async fn oversized_message_is_refused_without_ack_and_resumes_after_raising_the_limit() {
+    e2e_guard!();
+    // A single change larger than resources.max_message_bytes must stop the job before
+    // it is buffered (resource error, nothing acknowledged); raising the limit resumes.
+    let mut job = Job::new(
+        "bigmsg",
+        ACCOUNTS_DDL,
+        &["accounts", "events"],
+        "  max_message_bytes: 1048576",
+        "",
+    )
+    .await;
+    seed_accounts(&job.src, &job.schema, 5).await;
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", T).await;
+    let s = job.schema.clone();
+    job.src
+        .batch_execute(&format!(
+            "INSERT INTO {s}.events (account_id, kind, note) VALUES (1, 'small', 'ok'); \
+             INSERT INTO {s}.events (account_id, kind, note) VALUES (1, 'huge', repeat('h', 3000000)); \
+             INSERT INTO {s}.events (account_id, kind, note) VALUES (1, 'after', 'ok');"
+        ))
+        .await
+        .unwrap();
+    job.wait_state("ERROR", T).await;
+    assert_eq!(p.wait(), 1, "{}", p.log());
+    let (_, _, _, acked, err) = job.job_row().await.unwrap();
+    let err = err.unwrap();
+    assert!(err.contains("max_message_bytes"), "{err}");
+    // The huge transaction was not acknowledged: the slot still holds it.
+    let confirmed: String = job
+        .src
+        .query_one(
+            "SELECT confirmed_flush_lsn::text FROM pg_replication_slots WHERE slot_name = $1",
+            &[&job.slot],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(
+        confirmed <= acked,
+        "slot {confirmed} beyond checkpoint {acked}"
+    );
+    let n: i64 = job
+        .tgt
+        .query_one(
+            &format!("SELECT count(*) FROM {s}.events WHERE kind = 'after'"),
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(n, 0);
+    job.write_config(&["accounts", "events"], "", "");
+    let mut p = job.spawn(&["run"]);
+    job.wait_converged(ACCOUNTS_TABLES, T).await;
+    assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}
