@@ -1,0 +1,13 @@
+[2m2026-10-13T21:58:19.351634Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-timeouts [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:58:20.060713Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_timeouts [3mconsistent_point[0m[2m=[0m0/66240F0 [3msnapshot[0m[2m=[0m00000092-0000000B-1
+[2m2026-10-13T21:58:20.168022Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3105
+[2m2026-10-13T21:58:20.177299Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:58:20.776188Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_timeouts.events [3mrows[0m[2m=[0m60000 [3mbytes[0m[2m=[0m2898977
+[2m2026-10-13T21:58:20.799315Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_timeouts.accounts [3mrows[0m[2m=[0m20000 [3mbytes[0m[2m=[0m3083576
+[2m2026-10-13T21:58:20.799432Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m80000 [3mbytes[0m[2m=[0m5982553 [3mseconds[0m[2m=[0m"0.7" [3mmb_per_s[0m[2m=[0m"8.1"
+[2m2026-10-13T21:58:20.800084Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/66240F0
+[2m2026-10-13T21:58:20.993323Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_timeouts [3mfrom[0m[2m=[0m0/66240F0 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/66240F0))
+[2m2026-10-13T21:58:20.993379Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/66240F0 [3macked[0m[2m=[0m0/66240F0 [3mserver_wal_end[0m[2m=[0m0/66240F0 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:58:20.994703Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/66240F0
+[2m2026-10-13T21:58:22.082502Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
+[2m2026-10-13T21:58:22.082740Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/6CFAE80 [3macked[0m[2m=[0m0/6CFAE80

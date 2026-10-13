@@ -1,0 +1,2 @@
+[2m2026-10-13T21:58:23.671378Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-snapfail [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:58:24.027839Z[0m [31mERROR[0m [preflight] job "e2e-snapfail" is in state SNAPSHOTTING and cannot be resumed

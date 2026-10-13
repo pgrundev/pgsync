@@ -1,0 +1,14 @@
+[2m2026-10-13T21:58:24.033256Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-snapfail [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:58:24.369254Z[0m [32m INFO[0m restarting snapshot: discarding previous copy [3mstate[0m[2m=[0mERROR
+[2m2026-10-13T21:58:24.898127Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_snapfail [3mconsistent_point[0m[2m=[0m0/7FB2058 [3msnapshot[0m[2m=[0m00000097-00000009-1
+[2m2026-10-13T21:58:24.963240Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3105
+[2m2026-10-13T21:58:24.968224Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:58:25.379941Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_snapfail.events [3mrows[0m[2m=[0m60000 [3mbytes[0m[2m=[0m2898977
+[2m2026-10-13T21:58:25.532026Z[0m [32m INFO[0m copied [3mtable[0m[2m=[0me2e_snapfail.accounts [3mrows[0m[2m=[0m20000 [3mbytes[0m[2m=[0m3083576
+[2m2026-10-13T21:58:25.532145Z[0m [32m INFO[0m initial copy finished [3mtables[0m[2m=[0m2 [3mrows[0m[2m=[0m80000 [3mbytes[0m[2m=[0m5982553 [3mseconds[0m[2m=[0m"0.6" [3mmb_per_s[0m[2m=[0m"9.4"
+[2m2026-10-13T21:58:25.532915Z[0m [32m INFO[0m snapshot complete; switching to CDC [3mconsistent_point[0m[2m=[0m0/7FB2058
+[2m2026-10-13T21:58:25.699841Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_snapfail [3mfrom[0m[2m=[0m0/7FB2058 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/7FB2058))
+[2m2026-10-13T21:58:25.699875Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/7FB2058 [3macked[0m[2m=[0m0/7FB2058 [3mserver_wal_end[0m[2m=[0m0/7FB2108 [3mstate[0m[2m=[0mCATCHING_UP
+[2m2026-10-13T21:58:25.700583Z[0m [32m INFO[0m caught up; now streaming [3mlsn[0m[2m=[0m0/7FB2108
+[2m2026-10-13T21:58:26.529744Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
+[2m2026-10-13T21:58:26.530070Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/82013B0 [3macked[0m[2m=[0m0/82094D0

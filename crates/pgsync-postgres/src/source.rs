@@ -17,6 +17,7 @@ pub struct ServerInfo {
     pub max_wal_senders: i32,
     pub max_slot_wal_keep_size: String,
     pub wal_sender_timeout: String,
+    pub wal_sender_timeout_ms: i64,
     pub current_wal_lsn: Lsn,
     pub slots_in_use: i64,
     pub system_identifier: String,
@@ -90,7 +91,8 @@ pub async fn server_info(c: &PgClient) -> Result<ServerInfo> {
              current_setting('max_replication_slots')::int, current_setting('max_wal_senders')::int, \
              current_setting('max_slot_wal_keep_size'), current_setting('wal_sender_timeout'), \
              pg_current_wal_lsn()::text, (SELECT count(*) FROM pg_replication_slots), \
-             (SELECT system_identifier::text FROM pg_control_system()), current_database()",
+             (SELECT system_identifier::text FROM pg_control_system()), current_database(), \
+             (SELECT setting::bigint FROM pg_settings WHERE name = 'wal_sender_timeout')",
             &[],
         )
         .await
@@ -110,6 +112,7 @@ pub async fn server_info(c: &PgClient) -> Result<ServerInfo> {
         slots_in_use: row.get(8),
         system_identifier: row.get(9),
         dbname: row.get(10),
+        wal_sender_timeout_ms: row.get(11),
     })
 }
 
@@ -328,6 +331,7 @@ pub async fn preflight(
     slot: &str,
     tables: &[TableName],
     mode: PreflightMode,
+    feedback_interval: std::time::Duration,
 ) -> Result<SourcePreflight> {
     let mut r = PreflightReport::default();
     let server = server_info(c).await?;
@@ -398,7 +402,19 @@ pub async fn preflight(
             ),
         );
     }
-    r.pass("wal_sender_timeout", server.wal_sender_timeout.clone());
+    let fb_ms = feedback_interval.as_millis() as i64;
+    if server.wal_sender_timeout_ms > 0 && fb_ms * 2 > server.wal_sender_timeout_ms {
+        r.warn(
+            "wal_sender_timeout",
+            format!(
+                "{} is less than twice resources.feedback_interval ({fb_ms} ms): the walsender may drop \
+                 the connection while the applier is blocked; lower feedback_interval",
+                server.wal_sender_timeout
+            ),
+        );
+    } else {
+        r.pass("wal_sender_timeout", server.wal_sender_timeout.clone());
+    }
 
     // Role
     if role.replication || role.superuser {

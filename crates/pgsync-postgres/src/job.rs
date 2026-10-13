@@ -141,6 +141,7 @@ pub async fn check(
         &ctx.config.source.slot,
         &ctx.config.replication.tables,
         mode,
+        ctx.config.resources.feedback_interval,
     )
     .await?;
     // Replication protocol connectivity (pg_hba, REPLICATION attribute in practice).
@@ -331,16 +332,24 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
         pgsync_core::traits::ReplicationSink::load_checkpoint(&mut probe, &job_id).await?;
     drop(probe);
     if let Some(cp) = &existing {
-        if !restart_snapshot {
+        if cp.state == JobState::Initializing {
+            // A previous bootstrap died between recording its intent and recording the
+            // snapshot. Nothing was copied; the only thing to undo is a slot it may have
+            // created. Target tables are left alone.
+            info!("previous bootstrap did not reach the snapshot; discarding its metadata");
+            drop_owned_slot(ctx, cp, "left by an interrupted bootstrap").await?;
+            sink::delete_job(&tgt, &job_id).await?;
+        } else if !restart_snapshot {
             return Err(Error::config(format!(
                 "job {job_id:?} already exists on the target in state {}. Use `pgsync run` to resume, \
                  `pgsync bootstrap --restart-snapshot` to discard the incomplete copy and start over, \
                  or `pgsync cleanup` to remove it.",
                 cp.state
             )));
+        } else {
+            info!(state = %cp.state, "restarting snapshot: discarding previous copy");
+            restart_cleanup(ctx, &tgt, Some(cp)).await?;
         }
-        info!(state = %cp.state, "restarting snapshot: discarding previous copy");
-        restart_cleanup(ctx, &tgt, Some(cp)).await?;
     } else if restart_snapshot {
         info!("restarting snapshot: no job metadata; resetting target tables only");
         restart_cleanup(ctx, &tgt, None).await?;
@@ -380,6 +389,20 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
         }
     ));
 
+    // Record the intent to create the slot *before* creating it, so that a crash in between
+    // leaves a job row that marks the slot as owned (and therefore droppable by `cleanup`
+    // or the next `bootstrap`) instead of an orphaned slot that retains WAL.
+    let mut cp = Checkpoint::new_job(
+        &job_id,
+        &src_system_id,
+        &pre.server.dbname,
+        &cfg.source.slot,
+        &cfg.source.publication,
+    );
+    cp.state = JobState::Initializing;
+    cp.slot_owned = true;
+    sink::upsert_checkpoint(&tgt, &cp).await?;
+
     // Slot + exported snapshot. The replication connection must stay idle until all copy
     // sessions have imported the snapshot.
     let mut repl = ReplicationConnection::connect(&ctx.source, &cfg.safety, ctx.timeout()).await?;
@@ -396,15 +419,7 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
         created.slot_name, created.consistent_point
     ));
 
-    let mut cp = Checkpoint::new_job(
-        &job_id,
-        &src_system_id,
-        &pre.server.dbname,
-        &cfg.source.slot,
-        &cfg.source.publication,
-    );
     cp.state = JobState::Snapshotting;
-    cp.slot_owned = true;
     cp.consistent_point = Some(created.consistent_point);
     cp.commit_lsn = created.consistent_point;
     cp.committed_lsn = created.consistent_point;
@@ -418,10 +433,28 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     match snapshot_result {
         Ok(()) => {}
         Err(e) => {
+            // The copy is all-or-nothing: a slot without a usable snapshot would only retain
+            // WAL on the source until someone notices. Drop the slot this invocation created
+            // (never one that predates it) and leave the job in SNAPSHOTTING so that
+            // `bootstrap --restart-snapshot` is the only way forward.
+            let dropped = match drop_owned_slot(ctx, &cp, "its snapshot failed").await {
+                Ok(()) => "the slot was dropped (no WAL is retained)".to_owned(),
+                Err(de) => {
+                    error!(error = %de, slot = %cp.slot, "could not drop the slot; it retains WAL until `bootstrap --restart-snapshot` or `cleanup --yes`");
+                    format!(
+                        "WARNING: slot {:?} could not be dropped and retains WAL: {de}",
+                        cp.slot
+                    )
+                }
+            };
             error!(error = %e, "snapshot failed; job stays in SNAPSHOTTING and needs `bootstrap --restart-snapshot`");
-            let _ =
-                sink::set_job_state(&tgt, &job_id, JobState::Snapshotting, Some(&e.to_string()))
-                    .await;
+            let _ = sink::set_job_state(
+                &tgt,
+                &job_id,
+                JobState::Snapshotting,
+                Some(&format!("{e}; {dropped}")),
+            )
+            .await;
             return Err(e);
         }
     }
@@ -437,17 +470,32 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     run(ctx).await.map(|_| ())
 }
 
+/// Drop the job's slot on the source if the job owns it and it exists. Refuses while a
+/// walsender holds it (another process is streaming from it).
+async fn drop_owned_slot(ctx: &JobContext, cp: &Checkpoint, why: &str) -> Result<()> {
+    if !cp.slot_owned {
+        return Ok(());
+    }
+    let src = ctx.source_client("pgsync-bootstrap").await?;
+    let Some(info) = source::slot_info(&src, &cp.slot).await? else {
+        return Ok(());
+    };
+    if info.active {
+        return Err(Error::preflight(format!(
+            "slot {:?} is active (pid {:?}); stop the consumer first",
+            cp.slot, info.active_pid
+        )));
+    }
+    src.execute("SELECT pg_drop_replication_slot($1)", &[&cp.slot])
+        .await
+        .map_err(|e| from_pg("drop slot", e))?;
+    info!(slot = %cp.slot, "dropped replication slot owned by this job ({why})");
+    Ok(())
+}
+
 async fn restart_cleanup(ctx: &JobContext, tgt: &PgClient, cp: Option<&Checkpoint>) -> Result<()> {
-    if let Some(cp) = cp
-        && cp.slot_owned
-    {
-        let src = ctx.source_client("pgsync-bootstrap").await?;
-        if source::slot_info(&src, &cp.slot).await?.is_some() {
-            src.execute("SELECT pg_drop_replication_slot($1)", &[&cp.slot])
-                .await
-                .map_err(|e| from_pg("drop slot", e))?;
-            info!(slot = %cp.slot, "dropped replication slot owned by this job");
-        }
+    if let Some(cp) = cp {
+        drop_owned_slot(ctx, cp, "restarting the snapshot").await?;
     }
     for t in &ctx.config.replication.tables {
         let sql = match ctx.config.schema.mode {
@@ -530,6 +578,7 @@ async fn run_snapshot(
             let src = client::connect(&source, &safety, timeout, "pgsync-copy").await?;
             snapshot::import_snapshot(&src, &snapshot_name).await?;
             let dst = client::connect(&target, &safety, timeout, "pgsync-copy").await?;
+            sink::configure_session(&dst).await?;
             if let Err(e) = dst
                 .batch_execute("SET session_replication_role = replica")
                 .await

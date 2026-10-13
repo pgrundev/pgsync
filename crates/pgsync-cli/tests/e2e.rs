@@ -821,3 +821,134 @@ async fn published_but_unconfigured_table_stops_visibly() {
     assert_eq!(p.terminate(), 0);
     job.teardown().await;
 }
+
+#[tokio::test]
+async fn bootstrap_recovers_from_interrupted_bootstrap() {
+    e2e_guard!();
+    // A bootstrap that died between recording its intent (job row INITIALIZING, slot owned)
+    // and recording the snapshot may have left a slot behind. The next plain `bootstrap`
+    // must drop that slot and proceed instead of refusing or orphaning it.
+    let mut job = Job::new("interrupted", ACCOUNTS_DDL, &["accounts", "events"], "", "").await;
+    seed_accounts(&job.src, &job.schema, 10).await;
+    let (code, _) = job.run(&["status"]); // creates the pgsync metadata tables
+    assert_eq!(code, 0);
+    job.tgt
+        .execute(
+            "INSERT INTO pgsync.job (job_id, state, source_system_id, source_dbname, slot, publication, slot_owned) \
+             VALUES ($1, 'INITIALIZING', 'x', 'app', $2, $3, true)",
+            &[&job.job_id, &job.slot, &job.publication],
+        )
+        .await
+        .unwrap();
+    job.src
+        .execute(
+            "SELECT pg_create_logical_replication_slot($1, 'pgoutput')",
+            &[&job.slot],
+        )
+        .await
+        .unwrap();
+    let orphan_restart: String = job
+        .src
+        .query_one(
+            "SELECT restart_lsn::text FROM pg_replication_slots WHERE slot_name = $1",
+            &[&job.slot],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", T).await;
+    assert!(p.log().contains("interrupted bootstrap"), "{}", p.log());
+    // The slot in use now is a new one (created with an exported snapshot), not the orphan.
+    let now_restart: String = job
+        .src
+        .query_one(
+            "SELECT restart_lsn::text FROM pg_replication_slots WHERE slot_name = $1",
+            &[&job.slot],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_ne!(orphan_restart, now_restart);
+    mixed_dml(&job, 1).await;
+    job.wait_converged(ACCOUNTS_TABLES, T).await;
+    assert_eq!(p.terminate(), 0);
+    // `cleanup` on an INITIALIZING leftover drops the owned slot too.
+    job.tgt
+        .execute(
+            "UPDATE pgsync.job SET state = 'INITIALIZING' WHERE job_id = $1",
+            &[&job.job_id],
+        )
+        .await
+        .unwrap();
+    let (code, out) = job.run(&["cleanup", "--yes"]);
+    assert_eq!(code, 0, "{out}");
+    assert!(!job.slot_exists().await);
+    job.teardown().await;
+}
+
+#[tokio::test]
+async fn snapshot_failure_drops_the_fresh_slot() {
+    e2e_guard!();
+    // A failed copy cannot be resumed, so the slot created for it must not be left
+    // retaining WAL. The job stays SNAPSHOTTING with the reason, `run` refuses, and
+    // `bootstrap --restart-snapshot` starts over.
+    let mut job = Job::new(
+        "snapfail",
+        ACCOUNTS_DDL,
+        &["accounts", "events"],
+        "  snapshot_timeout: 1ms",
+        "",
+    )
+    .await;
+    seed_accounts(&job.src, &job.schema, 20_000).await;
+    let (code, out) = job.run(&["bootstrap"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(out.contains("snapshot exceeded snapshot_timeout"), "{out}");
+    assert_eq!(job.job_state().await.as_deref(), Some("SNAPSHOTTING"));
+    let (_, _, _, _, err) = job.job_row().await.unwrap();
+    let err = err.unwrap();
+    assert!(err.contains("slot was dropped"), "{err}");
+    assert!(
+        !job.slot_exists().await,
+        "slot must not retain WAL after a failed snapshot"
+    );
+    let (code, _) = job.run(&["run"]);
+    assert_eq!(code, 3, "SNAPSHOTTING is not resumable");
+    job.write_config(&["accounts", "events"], "", "");
+    let mut p = job.spawn(&["bootstrap", "--restart-snapshot"]);
+    job.wait_state("STREAMING", Duration::from_secs(120)).await;
+    mixed_dml(&job, 1).await;
+    job.wait_converged(ACCOUNTS_TABLES, T).await;
+    assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}
+
+#[tokio::test]
+async fn inherited_target_timeouts_do_not_stall_copy_or_apply() {
+    e2e_guard!();
+    // Timeouts configured on the target database would cancel the copy (and long apply
+    // transactions) on every attempt; pgsync's own sessions must reset them.
+    let mut job = Job::new("timeouts", ACCOUNTS_DDL, &["accounts", "events"], "", "").await;
+    let reset = "ALTER DATABASE app RESET statement_timeout; ALTER DATABASE app RESET idle_in_transaction_session_timeout";
+    job.tgt.batch_execute(reset).await.unwrap();
+    job.tgt
+        .batch_execute("ALTER DATABASE app SET statement_timeout = '20ms'; ALTER DATABASE app SET idle_in_transaction_session_timeout = '20ms'")
+        .await
+        .unwrap();
+    seed_accounts(&job.src, &job.schema, 20_000).await; // the COPY takes well over 20 ms
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", Duration::from_secs(120)).await;
+    let s = &job.schema;
+    job.src
+        .batch_execute(&format!(
+            "INSERT INTO {s}.events (account_id, kind, note) SELECT (g % 100) + 1, 'bulk', repeat('x', 200) FROM generate_series(1, 20000) g"
+        ))
+        .await
+        .unwrap();
+    job.wait_converged(ACCOUNTS_TABLES, T).await;
+    job.tgt.batch_execute(reset).await.unwrap();
+    assert!(!p.log().contains("reconnecting"), "{}", p.log());
+    assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}

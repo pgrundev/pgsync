@@ -1,0 +1,7 @@
+[2m2026-10-13T21:58:22.566503Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-snapfail [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
+[2m2026-10-13T21:58:23.279197Z[0m [32m INFO[0m replication slot created with exported snapshot [3mslot[0m[2m=[0mslot_snapfail [3mconsistent_point[0m[2m=[0m0/7FB2020 [3msnapshot[0m[2m=[0m00000095-0000000A-1
+[2m2026-10-13T21:58:23.371687Z[0m [32m INFO[0m schema dumped [3mtables[0m[2m=[0m2 [3mbytes[0m[2m=[0m3105
+[2m2026-10-13T21:58:23.377675Z[0m [32m INFO[0m target schema created from pg_dump
+[2m2026-10-13T21:58:23.662858Z[0m [32m INFO[0m dropped replication slot owned by this job (its snapshot failed) [3mslot[0m[2m=[0mslot_snapfail
+[2m2026-10-13T21:58:23.662905Z[0m [31mERROR[0m snapshot failed; job stays in SNAPSHOTTING and needs `bootstrap --restart-snapshot` [3merror[0m[2m=[0m[resource] snapshot exceeded snapshot_timeout (1ms)
+[2m2026-10-13T21:58:23.663529Z[0m [31mERROR[0m [resource] snapshot exceeded snapshot_timeout (1ms)

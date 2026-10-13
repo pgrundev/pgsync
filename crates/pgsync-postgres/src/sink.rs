@@ -134,12 +134,7 @@ impl PgSink {
                 warn!(error = %e, "cannot set session_replication_role = replica; target triggers and FK checks stay active")
             }
         }
-        client
-            .batch_execute(
-                "SET search_path = pg_catalog; SET synchronous_commit = on; SET lock_timeout = 0",
-            )
-            .await
-            .map_err(|e| from_pg("configure target session", e))?;
+        configure_session(&client).await?;
         Ok(PgSink {
             client,
             relations: HashMap::new(),
@@ -714,6 +709,24 @@ async fn update_checkpoint(client: &PgClient, cp: &Checkpoint) -> Result<u64> {
         )
         .await
         .map_err(|e| from_pg("update checkpoint", e))
+}
+
+/// Settings every pgsync session on the target needs: a fixed search path, durable commits,
+/// and no inherited timeouts. A `statement_timeout` or `idle_in_transaction_session_timeout`
+/// set on the target role or database would otherwise cancel long transactions or large
+/// copies on every attempt (SQLSTATE 57014 is retried, so the job would stall, not fail).
+pub async fn configure_session(client: &PgClient) -> Result<()> {
+    client
+        .batch_execute(
+            "SET search_path = pg_catalog; SET synchronous_commit = on; SET lock_timeout = 0; \
+             SET statement_timeout = 0; SET idle_in_transaction_session_timeout = 0; \
+             SET idle_session_timeout = 0",
+        )
+        .await
+        .map_err(|e| from_pg("configure target session", e))?;
+    // PostgreSQL 17+ only; ignore on older servers.
+    let _ = client.batch_execute("SET transaction_timeout = 0").await;
+    Ok(())
 }
 
 /// Insert or update the job row (autocommit).
