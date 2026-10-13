@@ -130,7 +130,14 @@ pub async fn apply_schema(target: &PgClient, tables: &[TableName], sql: &str) ->
 #[derive(Debug, Clone)]
 pub struct TargetColumn {
     pub name: String,
+    /// Declared type with modifiers, e.g. `character varying(80)`; for comparison with the
+    /// source and for messages.
     pub type_name: String,
+    /// Type without modifiers, e.g. `character varying`, used in `$n::type` casts. An
+    /// explicit cast to a modified type (`::varchar(80)`, `::numeric(12,2)`) silently
+    /// truncates or rounds; casting to the base type lets the column's own assignment
+    /// rules apply, which raise an error for values that do not fit, as COPY does.
+    pub cast_type: String,
     pub generated: bool,
     /// `GENERATED ALWAYS AS IDENTITY`: cannot be assigned by UPDATE, never changes on the source.
     pub identity_always: bool,
@@ -143,7 +150,8 @@ pub async fn target_columns(
 ) -> Result<Option<Vec<TargetColumn>>> {
     let rows = target
         .query(
-            "SELECT a.attname::text, format_type(a.atttypid, a.atttypmod), a.attgenerated <> '', a.attidentity = 'a' \
+            "SELECT a.attname::text, format_type(a.atttypid, a.atttypmod), a.attgenerated <> '', a.attidentity = 'a', \
+             format_type(a.atttypid, NULL) \
              FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace \
              WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped \
              ORDER BY a.attnum",
@@ -161,6 +169,7 @@ pub async fn target_columns(
                 type_name: r.get(1),
                 generated: r.get(2),
                 identity_always: r.get(3),
+                cast_type: r.get(4),
             })
             .collect(),
     ))
@@ -246,12 +255,14 @@ mod tests {
             TargetColumn {
                 name: "id".into(),
                 type_name: "bigint".into(),
+                cast_type: "bigint".into(),
                 generated: false,
                 identity_always: true,
             },
             TargetColumn {
                 name: "v".into(),
                 type_name: "character varying(10)".into(),
+                cast_type: "character varying".into(),
                 generated: false,
                 identity_always: false,
             },

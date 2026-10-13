@@ -53,8 +53,8 @@ pub struct TargetConfig {
 pub enum ReplicationMode {
     /// Initial snapshot followed by continuous CDC (default).
     SnapshotAndCdc,
-    /// CDC only: assumes the target already holds a consistent copy as of the slot's
-    /// consistent point. Only for tests and explicitly managed resyncs.
+    /// Reserved. Rejected by validation: pgsync cannot prove that an existing target copy is
+    /// consistent with a freshly created slot, so there is no safe way to skip the snapshot.
     CdcOnly,
 }
 
@@ -365,6 +365,14 @@ impl Config {
         if self.replication.tables.is_empty() {
             return bad("replication.tables must list at least one table".into());
         }
+        if self.replication.mode == ReplicationMode::CdcOnly {
+            return bad(
+                "replication.mode: cdc_only is not supported in this version: pgsync cannot verify \
+                 that the target already holds a copy consistent with a new slot's snapshot, and \
+                 streaming into an unverified copy would diverge silently. Use snapshot_and_cdc."
+                    .into(),
+            );
+        }
         let mut seen = BTreeSet::new();
         for t in &self.replication.tables {
             if !seen.insert(t) {
@@ -572,6 +580,11 @@ safety:
                 "more than once",
             ),
             (MINIMAL.replace("slot_1", "Slot-1"), "source.slot"),
+            (
+                format!("{MINIMAL}\n")
+                    .replace("replication:\n", "replication:\n  mode: cdc_only\n"),
+                "cdc_only is not supported",
+            ),
             (MINIMAL.replace("id: demo", "id: 'demo job'"), "job.id"),
             (
                 format!("{MINIMAL}\nresources:\n  memory_budget_mb: 4\n"),

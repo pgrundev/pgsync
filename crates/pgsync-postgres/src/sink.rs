@@ -550,7 +550,7 @@ fn resolve(relation: Arc<Relation>, target: &[TargetColumn]) -> Result<ResolvedR
                 c.name
             )));
         }
-        types.push(t.type_name.clone());
+        types.push(t.cast_type.clone());
         identity_always.push(t.identity_always);
     }
     if relation.replica_identity == ReplicaIdentity::Nothing {
@@ -924,18 +924,21 @@ mod tests {
             TargetColumn {
                 name: "id".into(),
                 type_name: "bigint".into(),
+                cast_type: "bigint".into(),
                 generated: false,
                 identity_always: true,
             },
             TargetColumn {
                 name: "v".into(),
-                type_name: "text".into(),
+                type_name: "character varying(80)".into(),
+                cast_type: "character varying".into(),
                 generated: false,
                 identity_always: false,
             },
             TargetColumn {
                 name: "big".into(),
                 type_name: "text".into(),
+                cast_type: "text".into(),
                 generated: false,
                 identity_always: false,
             },
@@ -946,9 +949,10 @@ mod tests {
     #[test]
     fn insert_sql_overrides_identity_and_casts() {
         let r = rel(ReplicaIdentity::Default);
+        // Casts use the base type: `$2::character varying(80)` would silently truncate.
         assert_eq!(
             r.insert_sql,
-            "INSERT INTO \"public\".\"t\" (\"id\", \"v\", \"big\") OVERRIDING SYSTEM VALUE VALUES ($1::bigint, $2::text, $3::text)"
+            "INSERT INTO \"public\".\"t\" (\"id\", \"v\", \"big\") OVERRIDING SYSTEM VALUE VALUES ($1::bigint, $2::character varying, $3::text)"
         );
     }
 
@@ -986,7 +990,7 @@ mod tests {
         let w = build_where(&r, None, Some(&old), None, &mut params).unwrap();
         assert_eq!(
             w,
-            "\"id\" IS NOT DISTINCT FROM $1::bigint AND \"v\" IS NOT DISTINCT FROM $2::text"
+            "\"id\" IS NOT DISTINCT FROM $1::bigint AND \"v\" IS NOT DISTINCT FROM $2::character varying"
         );
         assert!(params[1].0.is_none());
     }
@@ -1012,7 +1016,7 @@ mod tests {
         let (sql, params) = build_update(&r, None, None, &new).unwrap();
         assert_eq!(
             sql,
-            "UPDATE \"public\".\"t\" SET \"v\" = $1::text WHERE \"id\" = $2::bigint"
+            "UPDATE \"public\".\"t\" SET \"v\" = $1::character varying WHERE \"id\" = $2::bigint"
         );
         assert_eq!(params.len(), 2);
         // Only TOAST-unchanged non-key columns: still a valid statement.
@@ -1044,6 +1048,7 @@ mod tests {
         let generated = vec![TargetColumn {
             name: "id".into(),
             type_name: "bigint".into(),
+            cast_type: "bigint".into(),
             generated: true,
             identity_always: false,
         }];

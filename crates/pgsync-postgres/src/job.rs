@@ -12,7 +12,7 @@ use crate::snapshot;
 use crate::source::{self, PreflightMode, PreflightReport, SourcePreflight};
 use crate::url::ConnectionInfo;
 use pgsync_core::checkpoint::Checkpoint;
-use pgsync_core::config::{Config, ReplicationMode, SchemaMode, TableName, WalRetentionAction};
+use pgsync_core::config::{Config, SchemaMode, TableName, WalRetentionAction};
 use pgsync_core::engine::run_replication;
 use pgsync_core::metrics::Metrics;
 use pgsync_core::state::JobState;
@@ -474,9 +474,6 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     info!(consistent_point = %created.consistent_point, "snapshot complete; switching to CDC");
     drop(tgt);
 
-    if cfg.replication.mode == ReplicationMode::CdcOnly {
-        return Ok(());
-    }
     run(ctx).await.map(|_| ())
 }
 

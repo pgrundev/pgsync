@@ -1132,3 +1132,103 @@ async fn invalidated_slot_requires_resync_stopped_and_streaming() {
     assert_eq!(code, 4, "must keep refusing");
     job.teardown().await;
 }
+
+#[tokio::test]
+async fn source_column_drop_and_type_change_behaviour_is_explicit() {
+    e2e_guard!();
+    // DDL is not replicated. The documented contract: a column the target lacks stops the
+    // job (covered by unsupported_schema_change_stops_visibly); a column dropped on the
+    // source keeps existing on the target and receives its default; a type change is
+    // tolerated while values still cast, and stops the job (consistency, exit 5) when one
+    // does not. Nothing is ever skipped.
+    let mut job = Job::new("ddl2", ACCOUNTS_DDL, &["accounts", "events"], "", "").await;
+    seed_accounts(&job.src, &job.schema, 10).await;
+    let mut p = job.spawn(&["bootstrap"]);
+    job.wait_state("STREAMING", T).await;
+    let s = job.schema.clone();
+    // Dropped column: the target keeps `note` (nullable), new rows get NULL there.
+    job.src
+        .batch_execute(&format!(
+            "ALTER TABLE {s}.events DROP COLUMN note; \
+             INSERT INTO {s}.events (account_id, kind) VALUES (1, 'after-drop'); \
+             UPDATE {s}.events SET amount = 1 WHERE id = 1;"
+        ))
+        .await
+        .unwrap();
+    // Type change that still casts (int -> bigint range stays representable).
+    job.src
+        .batch_execute(&format!(
+            "ALTER TABLE {s}.accounts ALTER COLUMN name TYPE text; \
+             UPDATE {s}.accounts SET name = 'widened' WHERE id = 1;"
+        ))
+        .await
+        .unwrap();
+    let deadline = std::time::Instant::now() + T;
+    loop {
+        let n: i64 = job
+            .tgt
+            .query_one(
+                &format!(
+                    "SELECT count(*) FROM {s}.events WHERE kind = 'after-drop' AND note IS NULL"
+                ),
+                &[],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        let w: i64 = job
+            .tgt
+            .query_one(
+                &format!("SELECT count(*) FROM {s}.accounts WHERE name = 'widened'"),
+                &[],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        if n == 1 && w == 1 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "changes after DDL not applied: {}",
+            p.log()
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    assert_eq!(job.job_state().await.as_deref(), Some("STREAMING"));
+    // A value the target column cannot hold (varchar(80) on the target, text on the source).
+    job.src
+        .batch_execute(&format!(
+            "UPDATE {s}.accounts SET name = repeat('n', 200) WHERE id = 2"
+        ))
+        .await
+        .unwrap();
+    job.wait_state("ERROR", T).await;
+    assert_eq!(p.wait(), 5, "{}", p.log());
+    let (_, _, _, _, err) = job.job_row().await.unwrap();
+    assert!(
+        err.unwrap().contains("22001"),
+        "value too long must be reported as a consistency error"
+    );
+    let n: i64 = job
+        .tgt
+        .query_one(
+            &format!("SELECT count(*) FROM {s}.accounts WHERE length(name) > 80"),
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(n, 0);
+    // Operator widens the target column and resumes; the transaction is redelivered.
+    job.tgt
+        .batch_execute(&format!(
+            "ALTER TABLE {s}.accounts ALTER COLUMN name TYPE text"
+        ))
+        .await
+        .unwrap();
+    let mut p = job.spawn(&["run"]);
+    job.wait_converged(&[("accounts", "id")], T).await;
+    assert_eq!(p.terminate(), 0);
+    job.teardown().await;
+}
