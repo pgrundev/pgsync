@@ -33,6 +33,7 @@ pub struct JobContext {
     pub target: ConnectionInfo,
     pub metrics: Arc<Metrics>,
     pub cancel: CancellationToken,
+    pub progress: pgsync_core::progress::ProgressHandle,
 }
 
 impl JobContext {
@@ -45,6 +46,7 @@ impl JobContext {
             target,
             metrics: Arc::new(Metrics::new()),
             cancel,
+            progress: pgsync_core::progress::none(),
         })
     }
 
@@ -349,6 +351,32 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     }
     let pre = pre.expect("preflight present when ok");
     let src_system_id = pre.server.system_identifier.clone();
+    let warns = out
+        .source
+        .checks
+        .iter()
+        .chain(out.target.checks.iter())
+        .filter(|c| c.status == source::CheckStatus::Warn)
+        .count();
+    ctx.progress.step(&format!(
+        "connected to source {} · system {}",
+        short_version(&pre.server.version),
+        src_system_id
+    ));
+    ctx.progress.step(&format!(
+        "publication {} · {} tables",
+        cfg.source.publication,
+        pre.tables.len()
+    ));
+    ctx.progress.step(&format!(
+        "preflight: {} checks passed{}",
+        out.source.checks.len() + out.target.checks.len(),
+        if warns > 0 {
+            format!(" ({warns} warnings)")
+        } else {
+            String::new()
+        }
+    ));
 
     // Slot + exported snapshot. The replication connection must stay idle until all copy
     // sessions have imported the snapshot.
@@ -361,6 +389,10 @@ pub async fn bootstrap(ctx: &JobContext, restart_snapshot: bool) -> Result<()> {
     }
     let created = create_slot_with_snapshot(&mut repl, &cfg.source.slot).await?;
     info!(slot = %created.slot_name, consistent_point = %created.consistent_point, snapshot = %created.snapshot_name, "replication slot created with exported snapshot");
+    ctx.progress.step(&format!(
+        "replication slot {} created (pgoutput) · snapshot at {}",
+        created.slot_name, created.consistent_point
+    ));
 
     let mut cp = Checkpoint::new_job(
         &job_id,
@@ -449,6 +481,10 @@ async fn run_snapshot(
         .await?;
         schema::apply_schema(tgt, &cfg.replication.tables, &sql).await?;
         info!("target schema created from pg_dump");
+        ctx.progress.step(&format!(
+            "schema: {} tables created on target (pg_dump)",
+            cfg.replication.tables.len()
+        ));
     }
     for info in &pre.tables {
         let cols = schema::target_columns(tgt, &info.table.schema, &info.table.name)
@@ -483,6 +519,7 @@ async fn run_snapshot(
         let snapshot_name = snapshot_name.to_owned();
         let cancel = ctx.cancel.clone();
         let job_id = job_id.clone();
+        let progress = ctx.progress.clone();
         set.spawn(async move {
             let _permit = sem.acquire().await.map_err(|_| Error::cancelled())?;
             if cancel.is_cancelled() {
@@ -500,6 +537,8 @@ async fn run_snapshot(
             dst.batch_execute("BEGIN")
                 .await
                 .map_err(|e| from_pg("BEGIN copy", e))?;
+            progress.copy_started(&table.to_string());
+            let t0 = Instant::now();
             let stats = tokio::select! {
                 r = snapshot::copy_table(&src, &dst, &table, &columns, buffer, &metrics) => r?,
                 _ = cancel.cancelled() => return Err(Error::cancelled()),
@@ -520,6 +559,7 @@ async fn run_snapshot(
                 .await
                 .map_err(|e| from_pg("end snapshot txn", e))?;
             info!(%table, rows = stats.rows, bytes = stats.bytes, "copied");
+            progress.copy_done(&table.to_string(), stats.rows, stats.bytes, t0.elapsed());
             Ok((table, stats))
         });
     }
@@ -556,7 +596,34 @@ async fn run_snapshot(
         mb_per_s = format!("{:.1}", total_bytes as f64 / 1e6 / secs.max(0.001)),
         "initial copy finished"
     );
+    ctx.progress.step(&format!(
+        "initial copy complete: {} rows in {secs:.1}s",
+        group_digits(total_rows)
+    ));
     Ok(())
+}
+
+fn short_version(v: &str) -> String {
+    // "PostgreSQL 18.6 (Debian ...) on ..." -> "PostgreSQL 18.6"
+    v.split(" (")
+        .next()
+        .unwrap_or(v)
+        .split(" on ")
+        .next()
+        .unwrap_or(v)
+        .to_owned()
+}
+
+pub fn group_digits(n: u64) -> String {
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 // ---- run -----------------------------------------------------------------------------
@@ -594,6 +661,7 @@ pub async fn run(ctx: &JobContext) -> Result<Checkpoint> {
         &cfg.resources,
         ctx.metrics.clone(),
         ctx.cancel.clone(),
+        ctx.progress.clone(),
     )
     .await;
     monitor_cancel.cancel();

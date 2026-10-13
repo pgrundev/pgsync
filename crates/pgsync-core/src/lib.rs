@@ -9,6 +9,7 @@ pub mod error;
 pub mod event;
 pub mod lsn;
 pub mod metrics;
+pub mod progress;
 pub mod retry;
 pub mod state;
 pub mod traits;

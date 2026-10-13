@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
+mod ui;
+
 #[derive(Parser)]
 #[command(
     name = "pgsync",
@@ -23,9 +25,17 @@ struct Cli {
     /// Emit JSON (logs and command output).
     #[arg(long, env = "PGSYNC_JSON")]
     json: bool,
-    /// Log filter, e.g. `info`, `debug`, `pgsync_core=trace`.
-    #[arg(long, env = "PGSYNC_LOG", default_value = "info")]
-    log: String,
+    /// Log filter, e.g. `info`, `debug`, `pgsync_core=trace`. On a terminal the default is
+    /// `warn` so that progress lines stay readable; use --json for full structured logs.
+    #[arg(long, env = "PGSYNC_LOG")]
+    log: Option<String>,
+    /// Plain progress output without the per-transaction stream (no terminal detection).
+    #[arg(long)]
+    quiet: bool,
+    /// Include key column values (e.g. `id=42`) in the per-transaction lines. These are
+    /// row data; off by default.
+    #[arg(long)]
+    show_keys: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -100,8 +110,12 @@ fn shutdown_token() -> CancellationToken {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    init_logging(cli.json, &cli.log);
-    let code = match real_main(cli).await {
+    let tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+    let pretty = !cli.json && !cli.quiet && tty;
+    let default_log = if pretty { "warn" } else { "info" };
+    let log = cli.log.clone().unwrap_or_else(|| default_log.to_owned());
+    init_logging(cli.json, &log);
+    let code = match real_main(cli, pretty).await {
         Ok(()) => 0,
         Err(e) => {
             error!("{e:#}");
@@ -117,12 +131,16 @@ async fn main() {
     std::process::exit(code);
 }
 
-async fn real_main(cli: Cli) -> anyhow::Result<()> {
+async fn real_main(cli: Cli, pretty: bool) -> anyhow::Result<()> {
     let text = std::fs::read_to_string(&cli.config)
         .with_context(|| format!("reading {}", cli.config.display()))?;
     let config = Config::from_yaml(&text)?;
     let cancel = shutdown_token();
-    let ctx = JobContext::new(config, cancel)?;
+    let mut ctx = JobContext::new(config, cancel)?;
+    if pretty {
+        let color = std::env::var("NO_COLOR").is_err();
+        ctx.progress = std::sync::Arc::new(ui::Terminal::new(cli.show_keys, color));
+    }
     info!(job = %ctx.config.job.id, source = %ctx.source.redacted(), target = %ctx.target.redacted(), "pgsync {}", env!("CARGO_PKG_VERSION"));
 
     match cli.command {

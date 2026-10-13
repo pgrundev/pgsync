@@ -14,6 +14,7 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::event::SourceEvent;
 use crate::lsn::Lsn;
 use crate::metrics::Metrics;
+use crate::progress::{ProgressHandle, TxnSummary};
 use crate::retry::Backoff;
 use crate::state::JobState;
 use crate::traits::{EventStream, Feedback, ReplicationSink, SinkFactory, StreamFactory};
@@ -45,6 +46,7 @@ pub async fn run_apply_loop<S, K>(
     resources: &ResourcesConfig,
     metrics: Arc<Metrics>,
     cancel: CancellationToken,
+    progress: ProgressHandle,
 ) -> Result<ApplyOutcome>
 where
     S: EventStream + 'static,
@@ -79,6 +81,7 @@ where
         catchup_target,
         &ack_tx,
         &metrics,
+        &progress,
     )
     .await;
 
@@ -119,9 +122,15 @@ async fn applier_loop<K: ReplicationSink>(
     catchup_target: Lsn,
     ack_tx: &watch::Sender<AckPosition>,
     metrics: &Metrics,
+    progress: &ProgressHandle,
 ) -> Result<()> {
     let mut open: Option<OpenTxn> = None;
     let mut rows_in_txn: u64 = 0;
+    let mut names: std::collections::HashMap<u32, (String, Vec<usize>, Vec<String>)> =
+        Default::default();
+    let mut summary = TxnSummary::default();
+    let mut txn_started = std::time::Instant::now();
+    let wants_keys = progress.wants_keys();
 
     while let Some(envelope) = rx.recv().await {
         let event = envelope.into_inner();
@@ -144,6 +153,11 @@ async fn applier_loop<K: ReplicationSink>(
                     sink.begin().await?;
                 }
                 rows_in_txn = 0;
+                summary = TxnSummary {
+                    xid,
+                    ..Default::default()
+                };
+                txn_started = std::time::Instant::now();
                 open = Some(OpenTxn {
                     final_lsn,
                     xid,
@@ -151,6 +165,10 @@ async fn applier_loop<K: ReplicationSink>(
                 });
             }
             SourceEvent::Relation(rel) => {
+                let keys: Vec<usize> = rel.key_columns().map(|(i, _)| i).collect();
+                let key_names: Vec<String> =
+                    rel.key_columns().map(|(_, c)| c.name.clone()).collect();
+                names.insert(rel.id, (rel.qualified_name(), keys, key_names));
                 sink.relation(rel).await?;
             }
             SourceEvent::Op(op) => {
@@ -162,6 +180,7 @@ async fn applier_loop<K: ReplicationSink>(
                 };
                 if !txn.skipping {
                     rows_in_txn += 1;
+                    summarise(&mut summary, &names, &op, wants_keys);
                     sink.apply(op).await?;
                 }
             }
@@ -180,6 +199,7 @@ async fn applier_loop<K: ReplicationSink>(
                     )));
                 }
                 if txn.skipping {
+                    progress.skipped(txn.xid, end_lsn);
                     // Already durable. Make sure the ack position covers it.
                     if cp.record_keepalive(end_lsn) {
                         sink.save_checkpoint(cp).await?;
@@ -191,6 +211,9 @@ async fn applier_loop<K: ReplicationSink>(
                         info!(lsn = %cp.committed_lsn, "caught up; now streaming");
                     }
                     sink.commit(cp).await?;
+                    summary.end_lsn = end_lsn;
+                    summary.apply_time = txn_started.elapsed();
+                    progress.txn(&summary);
                     metrics.add(&metrics.txns_applied, 1);
                     metrics.add(&metrics.rows_applied, rows_in_txn);
                     metrics.set_lsn(&metrics.committed_lsn, cp.committed_lsn);
@@ -229,6 +252,53 @@ async fn applier_loop<K: ReplicationSink>(
         return Err(Error::cancelled());
     }
     Ok(())
+}
+
+fn summarise(
+    summary: &mut TxnSummary,
+    names: &std::collections::HashMap<u32, (String, Vec<usize>, Vec<String>)>,
+    op: &crate::event::Op,
+    wants_keys: bool,
+) {
+    use crate::event::{Op, Tuple, Value};
+    let key_sample = |table: &str, keys: &[usize], key_names: &[String], t: &Tuple| -> String {
+        let parts: Vec<String> = keys
+            .iter()
+            .zip(key_names)
+            .map(|(i, n)| match t.values.get(*i) {
+                Some(Value::Text(b)) => format!("{n}={}", String::from_utf8_lossy(b)),
+                _ => format!("{n}=?"),
+            })
+            .collect();
+        format!("{table} {}", parts.join(","))
+    };
+    match op {
+        Op::Truncate { relations, .. } => {
+            for r in relations {
+                let table = names.get(r).map(|n| n.0.as_str()).unwrap_or("?");
+                summary.record(table, "truncate");
+            }
+        }
+        _ => {
+            let id = op.relation_ids()[0];
+            let Some((table, keys, key_names)) = names.get(&id) else {
+                summary.record("?", op.kind());
+                return;
+            };
+            summary.record(table, op.kind());
+            if wants_keys && summary.keys.len() < crate::progress::MAX_KEYS {
+                let tuple = match op {
+                    Op::Insert { new, .. } => Some(new),
+                    Op::Update { key, new, .. } => Some(key.as_ref().unwrap_or(new)),
+                    Op::Delete { key, old, .. } => key.as_ref().or(old.as_ref()),
+                    Op::Truncate { .. } => None,
+                };
+                if let Some(t) = tuple {
+                    summary.record_key(key_sample(table, keys, key_names, t));
+                }
+            }
+        }
+    }
 }
 
 async fn reader_task<S: EventStream>(
@@ -338,6 +408,7 @@ pub async fn run_replication<SF, KF>(
     resources: &ResourcesConfig,
     metrics: Arc<Metrics>,
     cancel: CancellationToken,
+    progress: ProgressHandle,
 ) -> Result<Checkpoint>
 where
     SF: StreamFactory,
@@ -369,7 +440,18 @@ where
             let (stream, wal_end) = streams.connect(&cp).await?;
             metrics.set_lsn(&metrics.server_wal_end, wal_end);
             info!(from = %cp.committed_lsn, acked = %cp.acked_lsn, server_wal_end = %wal_end, state = %cp.state, "replication stream opened");
-            let outcome = run_apply_loop(stream, sink, cp, wal_end, resources, metrics.clone(), cancel.clone()).await?;
+            progress.streaming(cp.committed_lsn);
+            let outcome = run_apply_loop(
+                stream,
+                sink,
+                cp,
+                wal_end,
+                resources,
+                metrics.clone(),
+                cancel.clone(),
+                progress.clone(),
+            )
+            .await?;
             Ok::<_, Error>(outcome.checkpoint)
         }
         .await;
@@ -602,7 +684,16 @@ mod tests {
         let metrics = Arc::new(Metrics::new());
         let res = tokio::time::timeout(
             Duration::from_secs(5),
-            run_apply_loop(stream, sink, cp, Lsn(1000), &resources(), metrics, cancel),
+            run_apply_loop(
+                stream,
+                sink,
+                cp,
+                Lsn(1000),
+                &resources(),
+                metrics,
+                cancel,
+                crate::progress::none(),
+            ),
         )
         .await
         .expect("apply loop should finish");
@@ -794,6 +885,7 @@ mod tests {
             &*Box::leak(Box::new(resources())),
             Arc::new(Metrics::new()),
             cancel.clone(),
+            crate::progress::none(),
         ));
         tokio::time::sleep(Duration::from_millis(200)).await; // ~10 ticks at 20ms
         cancel.cancel();
@@ -849,6 +941,7 @@ mod tests {
             &*Box::leak(Box::new(resources())),
             metrics.clone(),
             cancel.clone(),
+            crate::progress::none(),
         ));
         tokio::time::sleep(Duration::from_millis(150)).await;
         let sent = feedback.lock().unwrap().len();
@@ -949,6 +1042,7 @@ mod tests {
             &resources,
             metrics.clone(),
             CancellationToken::new(),
+            crate::progress::none(),
         )
         .await;
         assert_eq!(res.err().map(|e| e.kind()), Some(ErrorKind::Config));
@@ -990,6 +1084,7 @@ mod tests {
             &resources(),
             Arc::new(Metrics::new()),
             CancellationToken::new(),
+            crate::progress::none(),
         )
         .await;
         assert_eq!(res.err().map(|e| e.kind()), Some(ErrorKind::Config));
@@ -1007,6 +1102,7 @@ mod tests {
             &resources(),
             Arc::new(Metrics::new()),
             CancellationToken::new(),
+            crate::progress::none(),
         )
         .await;
         assert_eq!(res.err().map(|e| e.kind()), Some(ErrorKind::ResyncRequired));
