@@ -27,7 +27,7 @@
   <a href="docs/architecture.md">Architecture</a>
 </p>
 
-> **Status: controlled technical beta (v0.1.0).** Synthetic or explicitly approved
+> **Status: controlled technical beta (v0.1.1, Beta 1.1).** Synthetic or explicitly approved
 > non-sensitive data only. There is no data masking yet, so pgsync must not be pointed at
 > production customer data. What is and is not supported is spelled out in
 > [`docs/features.md`](docs/features.md); the evidence behind every claim below is in
@@ -160,22 +160,36 @@ INFO replication stream opened from=0/6A97678 acked=0/6A97678 server_wal_end=0/6
 INFO caught up; now streaming lsn=0/6A97EE0
 ```
 
-**`pgsync status`** — positions on both sides and what the slot is holding:
+**`pgsync status`** — positions on both sides, the running process, and what the slot is
+holding:
 
 ```
 job demo-replication: STREAMING
-  source system   7696030015139909676 db app
+  source system   7696273405089744189 db app
   slot            pgsync_demo_slot (owned: true)
   publication     pgsync_demo
-  consistent pt   0/6A97678
-  committed lsn   0/6A9BB90
-  acked lsn       0/6A9BB90
+  consistent pt   0/3F1C3CD0
+  committed lsn   0/3F2BE3C0
+  acked lsn       0/4178AE48
   txns applied    1
-slot: active=true wal_status=reserved confirmed_flush=0/6A97EE0 restart=0/6A97EA8 invalidation=none
-source wal: 0/6A9BB90  slot lag: 15536 bytes  retained wal: 15592 bytes
-  table public.orders                    COPIED rows=1000 bytes=92232
+  last commit     11s ago (source commit time)
+source: PostgreSQL 18.6 (Homebrew)
+process: pid 69597 on build-host · pgsync 0.1.1 · alive (4s ago)
+  connection      connected  received 0/3F2BE3C0  server wal end 0/3FE05148  apply lag 0 bytes
+  throughput      0.1 txn/s  0 rows/s  (txns 1 rows 1 reconnects 0)
+  memory          9.4 MB rss
+  last apply      2026-10-13 15:22:36.525112-07
+snapshot: 2/2 tables copied, 1200 rows, 118118 bytes
+slot: active=true wal_status=reserved confirmed_flush=0/410B4020 restart=0/410B3FD0 invalidation=none
+source wal: 0/4178AE48  slot lag: 7171624 bytes  retained wal: 7171704 bytes
+  table public.orders                    COPIED rows=1000 bytes=91232
   table public.users                     COPIED rows=200 bytes=26886
 ```
+
+The process block comes from a heartbeat row the running job writes to the target every
+10 s; `status` marks it stale when the process stopped writing without a clean stop, and
+prints an `action:` line whenever the job needs an operator (resync, restart-snapshot,
+resume).
 
 `--json` turns both the logs and the command output into JSON.
 
@@ -249,7 +263,9 @@ export PGSYNC_SOURCE_URL='postgres://pgsync:…@db.internal:5432/app?sslmode=req
 export PGSYNC_TARGET_URL='postgres://pgsync_writer:…@golden.internal:5432/app'
 ```
 
-Any libpq-style URL works. TLS policy is derived from the host:
+Any libpq-style URL works (`sslmode=verify-full`, `sslrootcert=`, `application_name=`, …;
+the full mapping is in [`docs/compatibility.md`](docs/compatibility.md)). TLS policy is
+derived from the host:
 
 - Non-loopback hosts require TLS **with certificate verification** while
   `safety.require_tls` is true (the default). `sslmode=disable` is refused for them.
@@ -278,7 +294,7 @@ target:
   url_env: PGSYNC_TARGET_URL
 
 replication:
-  mode: snapshot_and_cdc          # or cdc_only
+  mode: snapshot_and_cdc          # the only supported mode
   tables: [public.users, public.orders]   # must equal the publication's table set
 
 schema:
@@ -305,7 +321,12 @@ safety:
   wal_retention_alarm_bytes: 1073741824
   wal_retention_action: warn      # or `stop` → job goes to PAUSED (WAL is still retained)
   monitor_interval: 30s
+  heartbeat_interval: 10s         # pgsync.job_runtime row for `status` and monitoring
 ```
+
+`resources.max_message_bytes` (unset: derived from the budget, at most 32 MiB) bounds the
+largest single change accepted from the server; a larger one stops the job without
+acknowledging anything. `replication.mode` must be `snapshot_and_cdc`.
 
 ## How it stays correct
 
@@ -353,7 +374,7 @@ lists. The full matrix: [`docs/features.md`](docs/features.md).
 
 | Role | Versions | Notes |
 |---|---|---|
-| Source | 16, 17, 18 | CI matrix runs the whole end-to-end suite on each; 18.6 is the reference and the only version run locally so far. 14–15 pass `check` with a warning and are untested. |
+| Source | 16, 17, 18 | Full suite (unit, live protocol, 24 fast and 5 disruptive scenarios, slot invalidation) run on 16.11, 17.11 and 18.6; see `docs/compatibility.md`. 14–15 pass `check` with a warning and are untested. |
 | Target | 16, 17, 18 | `pg_dump` must be at least the source's major version. |
 
 ## Memory and throughput

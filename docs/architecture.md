@@ -1,4 +1,4 @@
-# PGSync architecture (Beta 1, v0.1.0)
+# PGSync architecture (Beta 1.1, v0.1.1)
 
 PGSync is a standalone Rust process that replicates a selected set of tables from a source
 PostgreSQL (16, 17, 18) to a target PostgreSQL using native logical replication (`pgoutput`),
@@ -157,7 +157,11 @@ transactional `Message` payloads are not data changes. Any other message tag (st
 two-phase, unknown) stops the job with `unsupported` and the transaction is not acknowledged.
 An UPDATE/DELETE without a usable key, a relation that does not exist on the target, a column
 mismatch, or a server error during apply stops the job (`ERROR` state) with the transaction
-rolled back. No automatic skipping exists anywhere.
+rolled back. A relation outside `replication.tables` (publication changed after bootstrap)
+stops the job with `RESYNC_REQUIRED` before anything is applied. Parameters are cast to the
+target column's *base* type (`$1::character varying`, not `::character varying(80)`): the
+column's assignment rules then raise for values that do not fit instead of truncating or
+rounding them as an explicit modified-type cast would. No automatic skipping exists anywhere.
 
 ## 5. Resource management
 
@@ -170,6 +174,7 @@ Configurable and validated (`resources` section):
 | `max_inflight_bytes` | 16 MiB | Byte semaphore on the reader→applier channel. |
 | `channel_capacity` | 4096 | Item bound on the channel. |
 | `max_batch_rows` / `max_batch_bytes` | 500 / 4 MiB | Statements pipelined per flush inside a target transaction. |
+| `max_message_bytes` | derived (≤ 32 MiB) | Largest single replication message; enforced before buffering, larger ones stop the job (`resource`, nothing acknowledged). |
 | `max_parallel_copies` | 2 | Concurrent table copies during the snapshot. |
 | `connection_timeout` | 10s | TCP + startup timeout. |
 | `retry_backoff` | 1s → 30s, ×2 | Reconnect policy for transient errors. |
@@ -182,7 +187,9 @@ Measured values (RSS, CPU, throughput, lag) live in `docs/benchmarks.md` once re
 ## 6. Source safety
 
 - `run` never creates publications or slots. `bootstrap` creates the slot named in the
-  config (an explicit, operator-approved action) and records that PGSync owns it. Publication
+  config (an explicit, operator-approved action) and records that PGSync owns it — the
+  record is written before the slot exists, and the slot is dropped again if that
+  bootstrap's snapshot does not complete. Publication
   creation requires `safety.auto_create_publication: true` and is refused for hosts that are
   not loopback unless `safety.allow_remote_publication_create: true`.
 - No DDL on the source, no event triggers, no extensions, no DML. The replication role needs
@@ -192,6 +199,8 @@ Measured values (RSS, CPU, throughput, lag) live in `docs/benchmarks.md` once re
   loopback hosts.
 - Passwords are read from the URL in an environment variable and never logged; row values are
   never logged.
+- The running process writes a heartbeat row (`pgsync.job_runtime`) to the target every
+  `safety.heartbeat_interval`; `status` reads it (see `docs/operations.md`).
 - `check` and the runtime monitor report slot state, lag, retained WAL, `wal_status`, and
   `invalidation_reason`. Exceeding `wal_retention_alarm_bytes` raises an alarm and, with
   `safety.wal_retention_action: stop`, stops the job. Stopping never advances the slot.
