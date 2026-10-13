@@ -64,7 +64,8 @@ pub struct MetricsSnapshot {
     pub server_wal_end: Lsn,
     pub committed_lsn: Lsn,
     pub acked_lsn: Lsn,
-    /// `server_wal_end - committed_lsn`, bytes.
+    /// `server_wal_end - acked_lsn`, bytes: WAL the server has produced that this job has
+    /// not yet durably covered (applied, or acknowledged as carrying nothing for it).
     pub apply_lag_bytes: u64,
     pub inflight_items: u64,
     pub inflight_bytes: u64,
@@ -129,6 +130,7 @@ impl Metrics {
         let g = |a: &AtomicU64| a.load(Ordering::Relaxed);
         let wal_end = g(&self.server_wal_end);
         let committed = g(&self.committed_lsn);
+        let acked = g(&self.acked_lsn);
         MetricsSnapshot {
             state: self.state(),
             uptime_secs: self.started.map(|s| s.elapsed().as_secs()).unwrap_or(0),
@@ -144,8 +146,8 @@ impl Metrics {
             last_received_lsn: Lsn(g(&self.last_received_lsn)),
             server_wal_end: Lsn(wal_end),
             committed_lsn: Lsn(committed),
-            acked_lsn: Lsn(g(&self.acked_lsn)),
-            apply_lag_bytes: wal_end.saturating_sub(committed),
+            acked_lsn: Lsn(acked),
+            apply_lag_bytes: wal_end.saturating_sub(acked.max(committed)),
             inflight_items: g(&self.inflight_items),
             inflight_bytes: g(&self.inflight_bytes),
             rss_bytes: process_rss_bytes(),
@@ -197,6 +199,9 @@ mod tests {
         assert_eq!(s.txns_applied, 3);
         assert_eq!(s.committed_lsn, Lsn(400));
         assert_eq!(s.apply_lag_bytes, 600);
+        // Keepalive-acknowledged WAL (nothing for this publication) is not lag.
+        m.set_lsn(&m.acked_lsn, Lsn(900));
+        assert_eq!(m.snapshot().apply_lag_bytes, 100);
         let json = serde_json::to_value(&s).unwrap();
         assert_eq!(json["state"], "STREAMING");
     }
