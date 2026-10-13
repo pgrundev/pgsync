@@ -1,109 +1,155 @@
-# Test report — PGSync v0.1.0
+# Test report — PGSync v0.1.1 (Beta 1.1)
 
-Commit: `61eb49f` (see `git log`). Date: 2026-10-13.
-Machine: Apple M1 Pro, 10 cores, 16 GiB RAM, macOS 14.4 (Darwin 23.4.0).
-Docker Desktop 28.5.1 (Linux VM, 10 CPUs, 11.7 GiB) for the end-to-end suite;
-host-local PostgreSQL 18.6 (Homebrew) for the large-table scenario and benchmarks because the
-Docker VM disk was full.
+Commits: Beta 1 baseline `8f54509`; Beta 1.1 `a6d6c07` … `HEAD` (see `git log 8f54509..`).
+Date: 2026-10-13/14.
+Machine: Apple M1 Pro, 10 cores, 16 GiB RAM, macOS 14.4 (Darwin 23.4.0), Apple SSD.
+Databases: host-local Homebrew clusters, PostgreSQL 16.11, 17.11 and 18.6, matching
+source/target majors, started by `scripts/local-pg.sh`; a TLS pair (18.6) by
+`scripts/tls-lab.sh`. Docker was not usable (VM disk full), so the Compose pair was not
+run; CI still runs the fast suite against `postgres:16/17/18` images.
 
 ## Commands
 
 ```bash
-cargo test --workspace                                   # unit tests, no database
-docker compose up -d --wait
-PGSYNC_TEST_SOURCE_URL=postgres://pgsync:pgsync@localhost:5433/app \
-  cargo test -p pgsync-postgres --test live_replication  # live protocol test
-PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e \
-  cargo test -p pgsync-cli --test e2e -- --test-threads=1            # 17 fast scenarios
-PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e \
-  cargo test -p pgsync-cli --test e2e -- --test-threads=1 --ignored  # 5 disruptive scenarios
+# Unit tests (no database): 41 core + 25 adapter
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check
+
+# Host-local pairs (PG_BIN per version; ports as used in this report)
+PG_BIN=/opt/homebrew/opt/postgresql@18/bin ./scripts/local-pg.sh start $PWD/target/local-pg18          # 5533/5534
+PG_BIN=/opt/homebrew/opt/postgresql@16/bin SRC_PORT=51633 TGT_PORT=51634 ./scripts/local-pg.sh start $PWD/target/local-pg16
+PG_BIN=/opt/homebrew/opt/postgresql@17/bin SRC_PORT=51733 TGT_PORT=51734 ./scripts/local-pg.sh start $PWD/target/local-pg17
+
+# Per version: live protocol test, fast suite (25 scenarios), disruptive suite (5 scenarios)
+export PGSYNC_E2E=1 PGSYNC_E2E_DIR=$PWD/target/e2e-pg18 \
+  PGSYNC_E2E_SOURCE_ADMIN_URL=postgres://postgres@localhost:5533/app \
+  PGSYNC_E2E_SOURCE_URL=postgres://pgsync:pgsync@localhost:5533/app \
+  PGSYNC_E2E_TARGET_URL=postgres://postgres@localhost:5534/app \
+  PGSYNC_E2E_SOURCE_DATADIR=$PWD/target/local-pg18/source PGSYNC_E2E_TARGET_DATADIR=$PWD/target/local-pg18/target \
+  PGSYNC_E2E_PG_BIN=/opt/homebrew/opt/postgresql@18/bin PGSYNC_E2E_CRASH_ROUNDS=15
+PGSYNC_TEST_SOURCE_URL=$PGSYNC_E2E_SOURCE_URL PGSYNC_TEST_SOURCE_ADMIN_URL=$PGSYNC_E2E_SOURCE_ADMIN_URL \
+  cargo test -p pgsync-postgres --test live_replication
+cargo test -p pgsync-cli --test e2e -- --test-threads=1
+cargo test -p pgsync-cli --test e2e -- --test-threads=1 --ignored
+
+# TLS lab (PostgreSQL 18, ssl=on, hostssl + scram on the LAN address)
+PG_BIN=/opt/homebrew/opt/postgresql@18/bin ./scripts/tls-lab.sh start
+eval "$(./scripts/tls-lab.sh env)"
+PGSYNC_TLS_LAB=1 PGSYNC_TLS_LAB_DIR=$PWD/target/tls-lab PGSYNC_TLS_PG_BIN=/opt/homebrew/opt/postgresql@18/bin \
+  PGSYNC_TLS_PLAIN_URL=postgres://postgres@127.0.0.1:5533/app \
+  cargo test -p pgsync-postgres --test tls_lab -- --test-threads=1
+PGSYNC_TEST_SOURCE_URL=$PGSYNC_E2E_SOURCE_URL PGSYNC_TEST_SOURCE_ADMIN_URL=$PGSYNC_E2E_SOURCE_ADMIN_URL \
+  cargo test -p pgsync-postgres --test live_replication          # over TLS
+PGSYNC_E2E=1 PGSYNC_E2E_DIR=$PWD/target/e2e-tls cargo test -p pgsync-cli --test e2e -- --test-threads=1   # over TLS
+
+# Benchmarks and soak: see docs/performance.md
 ```
 
-## Unit tests (`cargo test --workspace`)
+## Results by suite
 
-| Crate | Tests | Covers |
-|---|---|---|
-| pgsync-core | 39 | LSN parsing/ordering/serde, config validation (defaults, bad values, unknown fields, budgets, durations), error categories, job states, checkpoint invariants and serde, byte-accounted channel (item/byte limits, oversized items, permit release), backoff, metrics, engine: ordering, ack-after-commit, skip of redelivered transactions, keepalive handling, catch-up transition, commit failure rollback, protocol violations, feedback under backpressure, reconnect driver with checkpoint reload, refusal without checkpoint / in RESYNC_REQUIRED |
-| pgsync-postgres | 23 | SQLSTATE classification, URL/TLS policy (loopback vs remote, insecure override), pgoutput decoder from byte fixtures (keepalive, begin/commit, relation, insert/update/delete tuple variants, binary values, truncation, truncate/origin/type/message, unsupported tags), standby status layout, slot JSON parsing across versions, START_REPLICATION quoting, slot continuity checks, pg_dump filtering, column verification, SQL generation (OVERRIDING SYSTEM VALUE, identity/TOAST-aware UPDATE, key selection, FULL identity, missing key, generated columns) |
+| Suite | PG 16.11 | PG 17.11 | PG 18.6 | PG 18.6 over TLS |
+|---|---|---|---|---|
+| Unit (66) | pass | pass | pass | — |
+| Live protocol (1) | pass | pass | pass | pass |
+| Fast e2e (25) | 25 pass | 25 pass | 25 pass | 24 pass + scenario 30 run separately: pass |
+| Disruptive e2e (5) | 5 pass | 5 pass | 5 pass | — |
+| TLS lab (7) | — | — | — | 7 pass |
 
-Result: 62 passed, 0 failed (39 + 23), plus `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` clean.
+Final runs after the last code change (`7761425`, the cast fix touches every statement the
+sink emits): PG 18 fast suite 25/25, PG 17 fast suite 25/25.
 
-## Live protocol test (`live_replication`)
-
-Opens a real replication connection (SCRAM-SHA-256), `IDENTIFY_SYSTEM`, creates a slot with
-an exported snapshot, starts streaming, decodes an insert with eight column types, sends
-feedback with reply request, receives the keepalive, verifies `confirmed_flush_lsn` moved,
-drops the slot. Result: pass (PostgreSQL 18.6).
-
-## End-to-end scenarios (`e2e`)
+## Scenarios
 
 Each scenario creates its own schema, publication, slot and job, drives the real `pgsync`
-binary as a subprocess, and verifies by comparing an MD5 over **full row contents** (all
-columns, text form, ordered by key) between source and target, never just row counts.
+binary as a subprocess, and verifies by comparing an MD5 over **full row contents** between
+source and target. Scenarios 1–23 are those of the Beta 1 report (unchanged); 24–30 are
+new in Beta 1.1 and each pins a bug or a behaviour that was previously unverified.
 
-| # | Spec scenario | Test | Result |
+| # | Scenario | Test | What it proves |
 |---|---|---|---|
-| 1 | Empty source table | `empty_tables_then_cdc` | pass |
-| 2 | Initial snapshot with existing rows | `snapshot_existing_rows_then_cdc_and_restart` (2,000 rows, graceful restart, resume) | pass |
-| 3–5 | Inserts, updates, deletes during the snapshot | `writes_during_snapshot_are_not_lost_or_duplicated` (80k rows copied while 200 mixed transactions run) | pass |
-| 6 | Concurrent source transactions | `concurrent_transactions_preserve_order` (6 writers × 100 interleaved transactions on shared rows) | pass |
-| 7 | Large tables | `large_table_snapshot` (1.2 M rows, host clusters) | pass (1.2 M rows snapshotted in 6.1 s, converged) |
-| 8 | Large rows and TOAST | `large_rows_and_toast_updates` (400 kB bytea, 5 MB text, unchanged-TOAST updates) | pass |
-| 9 | NULL and common types | `null_and_common_types_round_trip` (23 types incl. arrays, json/jsonb, bytea, intervals, infinity, NaN, special characters) | pass |
-| 10 | Transaction rollback | `transaction_rollback_and_truncate` (also TRUNCATE, RESTART IDENTITY CASCADE) | pass |
-| 11 | Source disconnect | `source_walsender_killed_reconnects` (`pg_terminate_backend` on the walsender) | pass |
-| 11b | Source restart | `source_restart_is_survived` (`docker restart`) | pass (after fixing walsender-shutdown handling) |
-| 12 | Destination disconnect | `target_connection_killed_reconnects` | pass |
-| 13 | Replication worker crash | `crash_sigkill_and_resume_without_loss_or_duplication` (two SIGKILLs under a 400-transaction non-idempotent write load) | pass |
-| 14 | Restart and resume from checkpoint | covered by 2, 13, 20 | pass |
-| 15 | Destination unavailable temporarily | `destination_restart_is_survived` (`docker restart`), `destination_paused_backpressure_then_recovers` | pass |
-| 16 | Unsupported schema change | `unsupported_schema_change_stops_visibly` (ADD COLUMN → ERROR naming the column, exit 5, nothing applied; DDL on target → resume) | pass |
-| 17 | Missing replication slot | `missing_slot_requires_resync` (exit 4, RESYNC_REQUIRED, stays refused, cleanup works) | pass |
-| 17b | Slot advanced by another consumer | `slot_advanced_by_another_consumer_requires_resync` | pass |
-| 18 | WAL retention threshold | `wal_retention_threshold_stops_job` (alarm, stop → PAUSED, resume after raising the limit) | pass |
-| 19 | Slow destination backpressure | `destination_paused_backpressure_then_recovers` (target container paused 20 s with a 64 KiB channel budget while 3,000 rows are written; walsender stays connected; convergence after unpause) | pass |
-| 20 | Repeated interruption and restart | `repeated_random_crashes_converge` (15 rounds, random 100–2500 ms, 70 % SIGKILL / 30 % SIGTERM, continuous writer: 9,800 writer transactions + 196 bulk updates = 9,996 applied, hashes equal) | pass |
-| — | Idle publication: slot advances over unpublished WAL | `idle_slot_advances_over_unpublished_wal` (20 k rows into an unpublished table; `confirmed_flush_lsn` reaches the WAL head) | pass |
-| — | Preflight rejections | `preflight_rejects_bad_tables_and_publications` (no PK, REPLICA IDENTITY NOTHING, missing table; bootstrap refused without creating a slot) | pass |
-| — | CLI status/cleanup | `status_and_cleanup_commands` | pass |
-| — | Duplicate bootstrap / incomplete snapshot | `bootstrap_refuses_duplicate_and_incomplete_snapshot_restart` | pass |
+| 1–23 | Beta 1 scenarios (snapshot, CDC, types, TOAST, rollback/truncate, concurrency, crash, reconnects, DDL refusal, missing/advanced slot, preflight, retention alarm, status/cleanup, duplicate bootstrap, idle slot, backpressure, restarts, random crash loop, large table) | as in the Beta 1 report | unchanged; all pass on 16/17/18 |
+| 24 | Published but unconfigured table | `published_but_unconfigured_table_stops_visibly` | a table added to the publication after bootstrap is refused with `RESYNC_REQUIRED` (exit 4), nothing applied, `run` keeps refusing, recovery by re-bootstrap with the table configured |
+| 25 | Interrupted bootstrap | `bootstrap_recovers_from_interrupted_bootstrap` | an `INITIALIZING` leftover with an orphan slot is cleaned by the next `bootstrap`; `cleanup` drops it too |
+| 26 | Snapshot failure | `snapshot_failure_drops_the_fresh_slot` | a failed copy (`snapshot_timeout`) drops the slot it created, records it, `run` refuses, `--restart-snapshot` recovers |
+| 27 | Inherited target timeouts | `inherited_target_timeouts_do_not_stall_copy_or_apply` | `statement_timeout` / `idle_in_transaction_session_timeout` on the target database cannot cancel the copy or the apply |
+| 28 | Oversized message | `oversized_message_is_refused_without_ack_and_resumes_after_raising_the_limit` | a 3 MB row with a 1 MiB limit stops the job (`resource`, exit 1) **before** buffering, the slot still holds the transaction, raising the limit and `run` applies it |
+| 29 | Slot invalidation | `invalidated_slot_requires_resync_stopped_and_streaming` | `max_slot_wal_keep_size` exceeded while stopped and while streaming (target frozen) → `RESYNC_REQUIRED`, exit 4, keeps refusing, `status` names the recovery |
+| 30 | Source column drop / type change | `source_column_drop_and_type_change_behaviour_is_explicit` | dropped column: target keeps it with the default; widened type keeps replicating; a value that no longer fits stops the job (exit 5, `22001`) with nothing altered; widening the target and `run` applies it |
 
-Final run of the fast suite after all fixes: 18 passed, 0 failed, 5 ignored (61 s on Docker). Disruptive suite: 5 passed after the
-fixes described below.
+TLS lab (`tests/tls_lab.rs`): trusted CA accepted on SQL and replication connections
+(TLS 1.3, SCRAM); unknown issuer rejected on both; hostname mismatch rejected on both
+(certificate swapped live); `sslmode=disable` and `insecure_skip_tls_verify` refused for a
+remote host; TLS required against `ssl=off` fails clearly; reconnect over TLS after the
+server terminates the session; no password in labels or errors. Plus the whole fast suite
+and the live protocol test over the lab. 254 run logs were scanned for passwords and row
+values: none.
 
-## Spec failure points (section 9)
+## Spec failure points (Beta 1.1 §3)
 
-| Failure point | How it is exercised | Outcome |
+| Crash / failure window | Exercised by | Outcome |
 |---|---|---|
-| Before applying a transaction | SIGKILL loop (20); reader error between transactions (11) | redelivered and applied once |
-| During transaction apply | SIGKILL loop (20); target connection killed mid-stream (12) | target rolls back; redelivered |
-| After target commit, before WAL ack | unit test `skips_redelivered_transactions_without_touching_sink`; SIGKILL loop hits this window statistically (`txns_skipped` metric) | skipped by LSN comparison |
-| During reconnect | 11, 11b, 12, 15 | resumed |
-| While transferring snapshot data | 3–5; `bootstrap_refuses_duplicate_and_incomplete_snapshot_restart` simulates a dead snapshot | restart required, never marked complete |
-| After a PostgreSQL restart | 11b (source), 15 (target) | resumed |
-| Temporary network loss | 11, 12, 19 (frozen peer) | resumed; feedback keeps the walsender alive |
+| Before transaction application | random crash loop (15 rounds × 3 versions), walsender kill, source restart | redelivered, applied once |
+| During transaction application | crash loop; target backend killed; target frozen (SIGSTOP) then resumed | target rolls back; redelivered |
+| After destination commit, before WAL ack | unit `skips_redelivered_transactions_without_touching_sink`; crash loop (`txns_skipped` > 0 observed) | skipped by LSN; never applied twice |
+| Before WAL acknowledgment with keepalive-only progress | `idle_slot_advances_over_unpublished_wal` | position persisted before it is reported |
+| During checkpoint recovery | `run` after SIGKILL in every crash scenario; invariants checked on load | resumes from the stored checkpoint; a violating row is refused |
+| Bootstrap: between slot creation and job row | scenario 25 | recovered (no orphan slot) |
+| Bootstrap: during copy | scenario 26 | slot dropped, restart required, nothing marked complete |
+| Last applied transaction and checkpoint atomic | `PgSink::commit` writes `pgsync.job` inside the data transaction; scenarios 13, 20, 30 | a crash after `COMMIT` returns leaves both; before, neither |
 
-## Bugs found by the suite (fixed before release)
+## Edge cases (Beta 1.1 §3)
 
-1. UPDATE assigned `GENERATED ALWAYS AS IDENTITY` columns (SQLSTATE 428C9). Fixed by never
-   assigning identity-always columns and skipping key columns when the key did not change.
-2. A logical walsender shutting down ends the stream with `CommandComplete`, not `CopyDone`;
-   this was classified as an internal error and left the job in `ERROR`. Now transient.
-3. Resuming from `PAUSED` never returned to `STREAMING`.
-4. `bootstrap --restart-snapshot` after `cleanup` did not reset leftover target tables.
-5. Engine: a reader failure mid-transaction was masked by the applier's "cancelled" result.
-6. `tokio_postgres` logs statement parameters at DEBUG; forced to WARN so row values never
-   reach logs.
-7. Found by the 40-minute soak: periodic unsolicited feedback prevented the walsender's
-   keepalive, so an idle publication never acknowledged skipped WAL (autovacuum, unpublished
-   tables) and the slot would retain it. The reader now reports only changed positions
-   while reading and keeps the unconditional heartbeat only while blocked by backpressure.
+| Case | Covered by | Result |
+|---|---|---|
+| INSERT / UPDATE / DELETE / TRUNCATE (CASCADE, RESTART IDENTITY) | 1–10 | replicated |
+| Unchanged TOAST, large TOAST (5 MB), NULLs | 8, 9, 28 | replicated; `u` values leave the target untouched |
+| Primary-key update | `concurrent_transactions_preserve_order`, unit `where_prefers_old_key_and_handles_full_identity` | old key used in WHERE |
+| Missing primary key / REPLICA IDENTITY NOTHING | preflight scenario | rejected before bootstrap |
+| Empty and idle publication, unpublished WAL | `idle_slot_advances_over_unpublished_wal` | slot advances over skipped WAL |
+| Long-running transaction on the target | 27 (timeouts reset) | not cancelled |
+| Rollback | 10 | never reaches the stream |
+| Schema changes | 16, 24, 30 | refused or explicitly tolerated as documented, never silently altered |
+| Relation metadata changes (new `Relation` message mid-stream) | 16, 30 | re-resolved against the target before apply |
+| Connection and slot loss | 11, 11b, 12, 15, 17, 17b, 29 | reconnect, or `RESYNC_REQUIRED` |
+| Unsupported pgoutput messages (streaming, two-phase) | unit `truncate_origin_type_message_unsupported` | job stops with `unsupported` |
+
+## Bugs found by Beta 1.1 (all fixed, each with a regression test)
+
+1. **Silent truncation/rounding of values on apply** (`7761425`). Parameters were cast to
+   the target column's declared type with modifier; `$1::varchar(80)` truncates and
+   `$1::numeric(12,2)` rounds without error. Found by scenario 30 (a 200-character name
+   arrived as 80 characters with the job `STREAMING`). Fix: cast to the base type.
+2. **Published-but-unconfigured tables applied to a same-named target table**
+   (`a6d6c07`). Fix: refuse with `RESYNC_REQUIRED`.
+3. **Orphaned slot after a crash between slot creation and the job row** (`7fc2298`).
+   Fix: job row first; recovery from `INITIALIZING`.
+4. **Failed snapshot left its slot retaining WAL indefinitely** (`7fc2298`). Fix: drop it.
+5. **Inherited target timeouts stalled the job forever** (57014 retried) (`7fc2298`).
+   Fix: sessions reset them.
+6. **Oversized messages silently exceeded the memory budget** (`ee900d8`). Fix:
+   `max_message_bytes` enforced before buffering.
+7. **Slot invalidation / removed WAL on the stream reported as an internal error** instead
+   of `RESYNC_REQUIRED` (`ee900d8`).
+8. **libpq `sslmode=verify-full|verify-ca` and `sslrootcert=` URLs rejected** by the URL
+   parser; `sslcert`/`sslkey` would have been rejected with an unhelpful message
+   (`ee900d8`).
+9. **`pg_dump` could not verify a publicly trusted certificate** (no `PGSSLROOTCERT`)
+   (`ee900d8`); and then refused `sslrootcert=system` with `sslmode=prefer` (fixed in the
+   same commit after scenario 28 caught it on loopback).
+10. **TLS failures reported as a generic internal "error performing TLS handshake"**
+    and retried (`ec30fed`). Fix: reason surfaced, classified as configuration.
+11. **Shutdown or reconnect could block on a reader stuck writing to a dead peer**
+    (`ee900d8`). Fix: bounded join and feedback-write timeout.
+12. **`apply_lag_bytes` counted keepalive-acknowledged WAL as lag** (`acb65e6`).
+13. **`replication.mode: cdc_only` ran the snapshot and exited without streaming**
+    (`7761425`). Fix: rejected by validation with the reason.
+14. Documentation: "dropping a column stops the job" was wrong (it does not); corrected
+    with the tested behaviour.
 
 ## Not covered
 
-- PostgreSQL 16 and 17 as source/target are in the CI matrix but were not executed in this
-  session (only 18.6 was run locally).
-- TLS end to end (certificate verification code path is unit-tested for policy only; no
-  TLS-enabled server was available).
-- User-defined types, enums, ranges, composite types.
-- Multi-hour soak (see benchmarks for the longest run performed).
+- Mixed PostgreSQL majors; PostgreSQL 14/15; Linux (recipe in `docs/linux-benchmark.md`).
+- MD5 and clear-text authentication against a server; GSSAPI; client certificates.
+- Network partitions other than peer freeze/restart/backend termination.
+- Datasets above 10 M rows per table (disk); see `docs/performance.md`.
+- User-defined types, enums, ranges, composites (text format should carry them; untested).

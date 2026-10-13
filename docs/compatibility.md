@@ -11,7 +11,7 @@ equivalent but was not used in this session (the Docker VM had no free disk).
 
 | Suite | PostgreSQL 16.11 | PostgreSQL 17.11 | PostgreSQL 18.6 |
 |---|---|---|---|
-| Unit tests (`cargo test --workspace`, no database) | 76 pass | 76 pass | 76 pass |
+| Unit tests (`cargo test --workspace`, no database; 41 core + 25 adapter) | 66 pass | 66 pass | 66 pass |
 | Live protocol test (`live_replication`: SCRAM, IDENTIFY_SYSTEM, slot with exported snapshot, stream, feedback, keepalive) | pass | pass | pass |
 | Fast end-to-end suite (24 scenarios, `e2e`) | 24 pass | 24 pass | 24 pass |
 | Disruptive suite (5 scenarios: target frozen, target restart, source restart, 15-round random crash loop, 1.2 M-row snapshot) | see test report | see test report | 5 pass |
