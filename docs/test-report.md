@@ -1,6 +1,6 @@
 # Test report — PGSync v0.1.0
 
-Commit: `__COMMIT__` (see `git log`). Date: 2026-10-13.
+Commit: `61eb49f` (see `git log`). Date: 2026-10-13.
 Machine: Apple M1 Pro, 10 cores, 16 GiB RAM, macOS 14.4 (Darwin 23.4.0).
 Docker Desktop 28.5.1 (Linux VM, 10 CPUs, 11.7 GiB) for the end-to-end suite;
 host-local PostgreSQL 18.6 (Homebrew) for the large-table scenario and benchmarks because the

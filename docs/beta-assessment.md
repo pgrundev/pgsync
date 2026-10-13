@@ -1,6 +1,6 @@
 # Beta 1 assessment — PGSync v0.1.0
 
-Commit: `__COMMIT__`. Date: 2026-10-13.
+Commit: `61eb49f`. Date: 2026-10-13.
 
 ## Verdict: READY for Controlled Technical Beta (synthetic / approved non-sensitive data only)
 
