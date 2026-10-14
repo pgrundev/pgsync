@@ -671,7 +671,7 @@ mod tests {
                 content: Bytes::from_static(b"abc")
             }
         );
-        for tag in [b'S', b'E', b'c', b'A', b'b', b'P', b'K', b'r', b'p'] {
+        for tag in *b"SEcAbPKrp" {
             assert_eq!(
                 decode_logical(b(&[&[tag], &[0; 40]])).unwrap(),
                 LogicalMessage::Unsupported { tag }
