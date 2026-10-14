@@ -82,3 +82,29 @@ jobs:
           # checksums.txt covers only the assets built here; a locally uploaded asset
           # for the same platform is replaced by the CI-built one.
           gh release upload "$TAG" dist/*.tar.gz dist/checksums.txt --clobber
+
+  crates-io:
+    # Publishes the three crates in dependency order. Needs the CARGO_REGISTRY_TOKEN
+    # repository secret (crates.io → Account Settings → API Tokens, scope publish-update).
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::warning::CARGO_REGISTRY_TOKEN is not set; skipping crates.io"; exit 0
+          fi
+          v="${TAG#v}"
+          for c in pgsync-core pgsync-postgres pgsync; do
+            if curl -fsS -A pgsync-release "https://crates.io/api/v1/crates/$c/$v" >/dev/null 2>&1; then
+              echo "$c $v already published"; continue
+            fi
+            cargo publish --locked -p "$c"
+            sleep 30   # let the index see it before the next crate resolves it
+          done

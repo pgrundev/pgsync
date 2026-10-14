@@ -4,7 +4,7 @@ SOURCE_URL ?= postgres://pgsync:pgsync@localhost:5433/app
 TARGET_URL ?= postgres://postgres:postgres@localhost:5434/app
 E2E_DIR    ?= target/e2e
 
-.PHONY: build test lint fmt up down e2e e2e-slow live check bootstrap run status cleanup bench
+.PHONY: build test lint fmt up down e2e e2e-slow live check bootstrap run status cleanup bench publish
 
 build:
 	cargo build --release
@@ -42,3 +42,9 @@ cleanup:
 
 bench: build
 	SOURCE_URL=$(SOURCE_URL) TARGET_URL=$(TARGET_URL) ./scripts/bench.sh
+
+## Publish the three crates to crates.io in dependency order (needs `cargo login`).
+publish:
+	cargo publish --locked -p pgsync-core
+	cargo publish --locked -p pgsync-postgres
+	cargo publish --locked -p pgsync
