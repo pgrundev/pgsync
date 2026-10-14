@@ -8,7 +8,15 @@ Date: 2026-10-13/14. Evidence: `docs/test-report.md`, `docs/performance.md`,
 
 ## Verdict
 
-**VERDICT_PLACEHOLDER**
+**READY FOR BETA 2.**
+
+Every correctness defect found by the audit and the new scenarios was fixed with a
+regression test; the engine passes the full suite on PostgreSQL 16, 17 and 18 and over
+verified TLS; crash, restart, slot-loss and disk-full behaviour is explicit and recoverable;
+memory is bounded by configuration and measured flat under a 68-minute interrupted soak
+and at 1–20 concurrent jobs; the diagnostics needed to supervise it from PGRun exist. The
+measurements that could not be completed on this machine (4-hour soak, 10 GB snapshot,
+Linux, an uncontended throughput rerun) are listed as open, not claimed.
 
 Meaning: engineering readiness to start the masking phase on this engine. It is **not**
 permission to connect unsanitised customer production data; that remains blocked until
@@ -36,7 +44,12 @@ Beta 2 masking exists (`docs/production-readiness-gaps.md`).
 - No password or row value in 254 run logs.
 - Benchmarks: all runs ended consistent (except the first 10 M-row run whose hash step itself
   failed on size; repeated with a chunked hash, see `docs/performance.md`).
-- Soak: SOAK_PLACEHOLDER
+- Soak: 68 minutes (disk-limited, see below), 113,726 transactions, 4 SIGKILLs, 2 SIGTERMs,
+  1 walsender termination, 0 unexpected exits, RSS 11.9 MB → 11.1 MB (first vs last ten
+  minutes), lag p99 4 MB, contents identical over 4.3 M rows.
+- A 10-minute first soak attempt that ran out of disk (caused by a concurrent benchmark)
+  showed the right behaviour for a resource error: `ERROR` state with the SQLSTATE, no
+  acknowledgement, resumed by `run` once space existed. Not counted as a pass.
 
 ## What failed (and was fixed)
 
@@ -79,6 +92,11 @@ process, no client certificates, no SCRAM channel binding on the replication con
 6. **Lossy-but-valid conversions** (numeric scale, timestamp precision) under
    `schema.mode: existing` with narrower target types are applied like `COPY` would.
 7. **Linux and ≥ 10 GB datasets unmeasured**; numbers are macOS/M1 Pro.
+8. **Open measurements**: a 4-hour soak (68 minutes achieved), a 10 GB snapshot with a
+   content check (2.9 GB copied, contents verified at 0.9 GB), and an uncontended catch-up
+   throughput rerun to confirm the 454–500 txn/s figure is contention and not a regression.
+   None blocks Beta 2 design work; all should run on the Linux benchmark host before any
+   capacity claim.
 
 ## Can the implementation proceed to masking?
 
@@ -95,10 +113,10 @@ base-type casts, heartbeat for publication gating). The proposal is in
 |---|---|---|
 | Snapshot MB/s | 36.5 (1 GB) | 32.5 (2.9 GB with concurrent writers); 38.1 (100 MB) |
 | Peak snapshot RSS | 33 MB | 40.1 MB (2.9 GB, includes catch-up with a full channel) |
-| CDC transactions/sec | 625 | CATCHUP_PLACEHOLDER |
-| CDC row operations/sec | ~72 K | CATCHUP_ROWS_PLACEHOLDER |
+| CDC transactions/sec | 625 (idle machine) | 454–500 (same procedure, machine at load average 20–27; lower bound) |
+| CDC row operations/sec | ~72 K | 52–57 K (same caveat) |
 | 20-job memory | 9.5 MB/job reported | 9.7–11.4 MB incremental per job (aggregate 204–220 MB for 20) |
-| Longest soak | 35 minutes | SOAK_DURATION_PLACEHOLDER |
+| Longest soak | 35 minutes | 68 minutes with 7 interruptions, consistent (4-hour target not reached: disk) |
 | Largest snapshot | 1 GB | 2.9 GB COPY (2 × 10 M rows) |
 
 Hardware: Apple M1 Pro, 16 GiB, macOS 14.4, PostgreSQL 18.6 host-local; see

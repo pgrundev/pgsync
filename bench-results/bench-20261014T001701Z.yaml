@@ -1,0 +1,15 @@
+job:
+  id: bench
+source:
+  url_env: SOURCE_URL
+  publication: pub_bench
+  slot: slot_bench
+target:
+  url_env: TARGET_URL
+replication:
+  tables: [bench.items, bench.ledger]
+resources:
+  max_parallel_copies: 2
+  memory_budget_mb: 128
+safety:
+  monitor_interval: 10s

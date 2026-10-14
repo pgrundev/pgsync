@@ -1,0 +1,10 @@
+22:50:19 preparing 400000 rows per table
+22:50:30 pgsync bootstrap started pid=7087
+22:50:40 snapshot complete; CDC phase begins
+22:50:40 4 writers started
+22:57:46 minute 7: SIGKILL pgsync
+22:57:48 pgsync run started pid=33737
+23:00:21 pgsync exited unexpectedly (state ERROR [resource] apply batch: could not extend file "base/16384/21679": No space left on device (SQLSTATE 53100)); restarting
+23:00:21 pgsync run started pid=90022
+23:00:31 pgsync exited unexpectedly (state ERROR [resource] apply batch: could not extend file "base/16384/21679": No space left on device (SQLSTATE 53100)); restarting
+23:00:31 pgsync run started pid=93142

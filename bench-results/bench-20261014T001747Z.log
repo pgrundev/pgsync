@@ -1,0 +1,14 @@
+{"timestamp":"2026-10-14T00:17:53.282983Z","level":"INFO","message":"pgsync 0.1.1","job":"bench","source":"postgres://pgsync@localhost:5533/app","target":"postgres://postgres@localhost:5534/app"}
+{"timestamp":"2026-10-14T00:17:54.048531Z","level":"INFO","message":"replication slot created with exported snapshot","slot":"slot_bench","consistent_point":"8/35564CF0","snapshot":"00000097-000008B6-1"}
+{"timestamp":"2026-10-14T00:17:54.105594Z","level":"INFO","message":"schema dumped","tables":2,"bytes":2414}
+{"timestamp":"2026-10-14T00:17:54.110721Z","level":"INFO","message":"target schema created from pg_dump"}
+{"timestamp":"2026-10-14T00:17:56.002135Z","level":"INFO","message":"copied","table":"bench.ledger","rows":400900,"bytes":24065417}
+{"timestamp":"2026-10-14T00:17:57.215364Z","level":"INFO","message":"copied","table":"bench.items","rows":400000,"bytes":90389756}
+{"timestamp":"2026-10-14T00:17:57.215522Z","level":"INFO","message":"initial copy finished","tables":2,"rows":800900,"bytes":114455173,"seconds":"3.2","mb_per_s":"36.2"}
+{"timestamp":"2026-10-14T00:17:57.419004Z","level":"INFO","message":"snapshot complete; switching to CDC","consistent_point":"8/35564CF0"}
+{"timestamp":"2026-10-14T00:17:57.597271Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_bench","from":"8/35564CF0","confirmed_flush":"Some(Lsn(8/35564CF0))"}
+{"timestamp":"2026-10-14T00:17:57.597306Z","level":"INFO","message":"replication stream opened","from":"8/35564CF0","acked":"8/35564CF0","server_wal_end":"8/3572B160","state":"CATCHING_UP"}
+{"timestamp":"2026-10-14T00:17:57.911893Z","level":"INFO","message":"caught up; now streaming","lsn":"8/3572B160"}
+{"timestamp":"2026-10-14T00:18:07.673781Z","level":"INFO","message":"wal monitor","slot":"slot_bench","active":true,"wal_status":"Some(\"reserved\")","retained_wal_bytes":11802056,"slot_lag_bytes":27120,"apply_lag_bytes":0,"safe_wal_size":"Some(4291359632)"}
+{"timestamp":"2026-10-14T00:18:08.073917Z","level":"INFO","message":"shutdown requested; finishing the current transaction"}
+{"timestamp":"2026-10-14T00:18:08.081059Z","level":"INFO","message":"replication stopped cleanly","committed":"8/36413438","acked":"8/36413438"}

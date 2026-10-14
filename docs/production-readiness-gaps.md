@@ -46,7 +46,8 @@ in Beta 1.1 was fixed (see `docs/test-report.md`).
 | 100 GB, 1 TB | Not run. |
 | Mixed PostgreSQL majors | Not run, not claimed. |
 | Network partition (packet loss, half-open connections) | Only peer freezes (SIGSTOP), restarts and terminated backends were tested. `tcp_user_timeout` / keepalive settings in the URL are passed through for the SQL client; the replication connection relies on `wal_sender_timeout` on the server and on feedback write timeouts. |
-| Multi-hour soak | See `docs/performance.md` for the duration actually run. |
+| Multi-hour soak | 68 minutes with 7 interruptions, consistent; the 4-hour target was cut short by the development disk (`docs/performance.md`). |
+| Catch-up throughput on an uncontended machine | 454–500 txn/s measured at load average 20–27 versus 625 in Beta 1 on an idle machine; rerun pending. |
 | MD5 and clear-text password authentication | Code paths exist; not exercised against a server. |
 
 ## Ready-for-Beta-2 criteria met

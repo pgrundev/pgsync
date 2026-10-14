@@ -56,7 +56,9 @@ PGSYNC_E2E=1 PGSYNC_E2E_DIR=$PWD/target/e2e-tls cargo test -p pgsync-cli --test 
 | TLS lab (7) | — | — | — | 7 pass |
 
 Final runs after the last code change (`7761425`, the cast fix touches every statement the
-sink emits): PG 18 fast suite 25/25, PG 17 fast suite 25/25.
+sink emits): PG 18 fast suite 25/25, PG 17 fast suite 25/25. Soak (68 min, 7 interruptions)
+and benchmarks: `docs/performance.md`; every run ended with identical contents except the
+first 10 M-row run, whose hash step overflowed and was repeated at 3 M rows.
 
 ## Scenarios
 

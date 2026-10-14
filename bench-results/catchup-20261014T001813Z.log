@@ -1,0 +1,6 @@
+{"timestamp":"2026-10-14T00:18:16.070649Z","level":"INFO","message":"pgsync 0.1.1","job":"bench","source":"postgres://pgsync@localhost:5533/app","target":"postgres://postgres@localhost:5534/app"}
+{"timestamp":"2026-10-14T00:18:16.416412Z","level":"INFO","message":"START_REPLICATION accepted","slot":"slot_bench","from":"8/36413438","confirmed_flush":"Some(Lsn(8/36413438))"}
+{"timestamp":"2026-10-14T00:18:16.416445Z","level":"INFO","message":"replication stream opened","from":"8/36413438","acked":"8/36413438","server_wal_end":"8/3CACD0C0","state":"STREAMING"}
+{"timestamp":"2026-10-14T00:18:26.319153Z","level":"INFO","message":"wal monitor","slot":"slot_bench","active":true,"wal_status":"Some(\"reserved\")","retained_wal_bytes":120183320,"slot_lag_bytes":107715720,"apply_lag_bytes":3375560,"safe_wal_size":"Some(4182978368)"}
+{"timestamp":"2026-10-14T00:18:26.688752Z","level":"INFO","message":"shutdown requested; finishing the current transaction"}
+{"timestamp":"2026-10-14T00:18:26.694527Z","level":"INFO","message":"replication stopped cleanly","committed":"8/3CACD0C0","acked":"8/3CACD0C0"}

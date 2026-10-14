@@ -1,0 +1,23 @@
+23:03:39 preparing 400000 rows per table
+23:03:47 pgsync bootstrap started pid=52961
+23:03:52 snapshot complete; CDC phase begins
+23:03:52 4 writers started
+23:10:52 minute 7: SIGKILL pgsync
+23:10:54 pgsync run started pid=66039
+23:18:56 minute 15: SIGTERM pgsync
+23:18:58 pgsync run started pid=68266
+23:27:03 minute 23: SIGKILL pgsync
+23:27:05 pgsync run started pid=37891
+23:34:52 minute 31: terminating walsender
+23:44:53 minute 41: SIGKILL pgsync
+23:44:55 pgsync run started pid=23155
+23:56:59 minute 53: SIGTERM pgsync
+23:57:01 pgsync run started pid=57137
+00:10:57 minute 67: SIGKILL pgsync
+00:10:59 pgsync run started pid=87678
+00:12:12 free disk 1128 MB below MIN_FREE_MB=2048; ending the soak early (clean stop, then hashes)
+00:12:12 duration reached; stopping writers
+00:12:12 writers stopped; waiting for convergence
+00:12:12 pgsync stopped; comparing contents
+00:12:31 items  source=22f3fad7686ae97da4ccbd0a04af2f62:400000 target=22f3fad7686ae97da4ccbd0a04af2f62:400000
+00:12:31 ledger source=71be990a299e422efa103eeef91ef4bb:3905025 target=71be990a299e422efa103eeef91ef4bb:3905025

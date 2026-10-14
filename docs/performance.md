@@ -29,11 +29,11 @@ figures are not affected by contention.
 |---|---|---|---|
 | Snapshot MB/s | 36.5 (1 GB, 2 × 4 M rows, no concurrent writes) | **32.5** (2.9 GB COPY, 2 × 10 M rows, **two writers running during the copy**, PG17 e2e suite running on another pair) ; 38.1 at 100 MB (PG17 pair, see below) | same machine; the 2.9 GB run paid for concurrent writers and a parallel test suite |
 | Peak snapshot RSS | 33 MB (1 GB) | **40.1 MB** (2.9 GB; the phase includes the 17 s catch-up with a full 16 MiB channel) · 21.0 MB average | same machine, same limits; growth is the channel filling during catch-up, not data size |
-| CDC transactions/sec (catch-up, no writer bottleneck) | 625 txn/s (100 MB dataset, 118 MB WAL backlog) | **131.6 txn/s on a 4 GB dataset with 2.2 GB of WAL backlog (59 MB/s of WAL, 12.5 k rows/s, 25.6 % CPU: target-I/O bound, not pgsync-bound)** · 100 MB dataset rerun: see "Catch-up on the baseline dataset" | not comparable across dataset sizes; the baseline-sized rerun is the like-for-like number |
-| CDC row operations/sec | ≈72 k (same run) | 12.5 k on the 4 GB dataset (I/O bound) · baseline-sized rerun below | same caveat |
+| CDC transactions/sec (catch-up, no writer bottleneck) | 625 txn/s (100 MB dataset, 118 MB WAL backlog, idle machine, 98 % CPU) | **454–500 txn/s** on the same dataset with the machine at load average 20–27 (pgsync at 76–80 % CPU); 131.6 txn/s on a 4 GB dataset where the target's random I/O is the limit | same dataset and procedure; the Beta 1.1 machine was shared with another session's build, so the figure is a lower bound |
+| CDC row operations/sec | ≈72 k (same run) | **52–57 k** (same run); 12.5 k on the 4 GB dataset | same caveat |
 | 20-job memory | 9.5 MB/job "per process RSS" (shared pages counted 20 times) | **incremental 9.7–11.4 MB per additional job** (aggregate differences, idle and active), aggregate 204 MB active / 220 MB idle for 20 jobs, 291/348 MB peak | Beta 1.1 measures what one more job actually costs; the Beta 1 figure divided a shared-page-inflated RSS |
-| Longest soak | 35 min (40-min run) | see "Soak" | — |
-| Largest snapshot | 1 GB (1.17 GB COPY) | **2.9 GB COPY (3.9 GB on disk, 2 × 10 M rows)** | disk-limited (17 GB free on the development machine); 10 GB not run |
+| Longest soak | 35 min (40-min run) | **68 min** with 7 scheduled interruptions, flat RSS, identical contents (stopped by the disk guard, not by a failure) | the 4-hour target was not reached on this machine |
+| Largest snapshot | 1 GB (1.17 GB COPY) | **2.9 GB COPY (3.9 GB on disk, 2 × 10 M rows)**; contents verified at 874 MB COPY with writers during the copy | disk-limited (17 GB free, shared); 10 GB not run |
 
 ## Snapshot, 2 × 10 M rows (commit `7761425`, PG 18 pair, `bench-20261013T223335Z`)
 
@@ -101,9 +101,34 @@ blocked on the target's commits competing with the soak's writers for the same d
 cast type string changed, the heartbeat writes one row every 10 s). An idle-machine rerun
 on the PG 18 pair is scheduled after the soak and recorded below when available.
 
-### Catch-up rerun on an idle machine
+### Catch-up rerun after the soak (PG 18 pair, `catchup-20261014T001615Z` and two more)
 
-Pending.
+Same procedure as Beta 1 (2 × 400 k rows, 5,000-transaction backlog of 100 inserts + 10
+updates + 5 deletes, ≈108 MB of WAL). The machine was **not idle**: the 1-minute load
+average was 20–27 on 10 cores throughout (another session was building a large C project),
+so these are lower bounds.
+
+| Sample | Catch-up time | Transactions/s | Row operations/s (575,000 ops) | pgsync CPU | RSS avg / peak | Contents |
+|---|---|---|---|---|---|---|
+| Beta 1 (idle machine) | 8.0 s | 625 | ≈72 k | 98 % | 34.9 / 44.3 MB | identical |
+| 1 (00:16 UTC) | 11.0 s | 454.5 | 52 k | 75.8 % | 21.7 / 37.0 MB | identical |
+| 2 (00:17 UTC, load 26) | 11.0 s | 454.5 | 52 k | 80.3 % | — | identical |
+| 3 (00:17 UTC, load 20) | 10.0 s | 500.0 | 57 k | 80.1 % | — | identical |
+
+At 76–80 % CPU under a load average above 20, pgsync was being descheduled; the applier
+is the same single-threaded pipeline as in Beta 1 and no change in Beta 1.1 touches the
+per-statement path. Whether the remaining 20–27 % gap is contention alone cannot be
+settled on this machine in this session; it is listed as an open measurement in
+`docs/production-readiness-gaps.md`. Memory was lower than in Beta 1 at the same workload.
+
+### Consistency at the 1 GB class with writers during the copy (`bench-20261014T001831Z`)
+
+The 10 M-row run above could not compare contents (hash overflow, since fixed) and the disk
+could not hold that dataset a second time. A 2 × 3 M-row run (1.18 GB on disk, 874 MB COPY)
+with two writers during the copy, under the same load average above 20: copy 36 s
+(24.3 MB/s), catch-up 2 s, 185 MB of WAL generated during the snapshot, retained-WAL peak
+177 MB, RSS peak 42.4 MB during the copy and 22.8 MB during CDC, **contents identical**
+on both tables after 60 s of four-writer CDC.
 
 ## Concurrency: 1, 5, 10, 20 jobs (`scale-matrix-20261013T224251Z`)
 

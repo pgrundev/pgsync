@@ -1,0 +1,51 @@
+{
+  "duration_seconds": 4100,
+  "samples": 395,
+  "rss_avg_mb": 13.5,
+  "rss_peak_mb": 59.0,
+  "rss_quarters": [
+    {
+      "rss_avg_mb": 14.4,
+      "rss_peak_mb": 59.0
+    },
+    {
+      "rss_avg_mb": 14.0,
+      "rss_peak_mb": 42.4
+    },
+    {
+      "rss_avg_mb": 11.5,
+      "rss_peak_mb": 31.7
+    },
+    {
+      "rss_avg_mb": 14.3,
+      "rss_peak_mb": 51.9
+    }
+  ],
+  "rss_first_10min_avg_mb": 11.9,
+  "rss_last_10min_avg_mb": 11.1,
+  "cpu_avg_pct": 4.3,
+  "apply_lag_p50_mb": 0.02,
+  "apply_lag_p99_mb": 4.11,
+  "apply_lag_max_mb": 16.0,
+  "retained_wal_max_mb": 105.7,
+  "longest_lag_over_64mb_samples": 0,
+  "txns_applied": 113726,
+  "reconnects_logged": 1,
+  "sigkills": 4,
+  "sigterms": 2,
+  "walsender_kills": 1,
+  "unexpected_exits": 0,
+  "drain_seconds_after_writers_stopped": 0,
+  "consistent": true,
+  "items": {
+    "source": "22f3fad7686ae97da4ccbd0a04af2f62:400000",
+    "target": "22f3fad7686ae97da4ccbd0a04af2f62:400000"
+  },
+  "ledger": {
+    "source": "71be990a299e422efa103eeef91ef4bb:3905025",
+    "target": "71be990a299e422efa103eeef91ef4bb:3905025"
+  },
+  "machine": "arm64 Apple M1 Pro Darwin 23.4.0",
+  "pgsync_commit": "04b614f",
+  "stamp": "20261013T230339Z"
+}

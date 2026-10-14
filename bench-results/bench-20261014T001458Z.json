@@ -1,0 +1,39 @@
+{
+  "rows_per_table": 400000,
+  "source_bytes_on_disk": 155836416,
+  "copy_bytes": 114462772,
+  "snapshot_seconds": 6.0,
+  "snapshot_mb_per_s": 19.1,
+  "copy_seconds": 5.0,
+  "copy_mb_per_s": 22.9,
+  "catchup_seconds_after_copy": 1.0,
+  "writers_during_snapshot": 0,
+  "wal_bytes_generated_during_snapshot": 2362552,
+  "retained_wal_peak_bytes": 1878248,
+  "cdc_seconds": 60.0,
+  "cdc_txns_applied": 6825,
+  "cdc_rows_applied": 190849,
+  "cdc_txns_per_s": 113.8,
+  "drain_lag_seconds_after_writers_stopped": 0,
+  "snapshot": {
+    "samples": 6,
+    "rss_avg_mb": 23.0,
+    "rss_peak_mb": 31.2,
+    "cpu_avg_pct": 18.2
+  },
+  "cdc": {
+    "samples": 59,
+    "rss_avg_mb": 15.6,
+    "rss_peak_mb": 48.0,
+    "cpu_avg_pct": 10.4
+  },
+  "consistent": true,
+  "machine": "arm64 Apple M1 Pro",
+  "ram_bytes": 17179869184,
+  "cores": 10,
+  "kernel": "Darwin 23.4.0",
+  "disk_free_bytes": 5302394880,
+  "pgsync_commit": "6d311e0",
+  "source_pg": "18.6 (Homebrew)",
+  "timestamp": "20261014T001458Z"
+}

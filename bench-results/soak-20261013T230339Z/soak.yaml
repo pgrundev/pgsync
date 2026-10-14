@@ -1,0 +1,14 @@
+job:
+  id: soak
+source:
+  url_env: SOURCE_URL
+  publication: pub_soak
+  slot: slot_soak
+target:
+  url_env: TARGET_URL
+replication:
+  tables: [soak.items, soak.ledger]
+resources:
+  retry_backoff: {initial: 500ms, max: 5s}
+safety:
+  monitor_interval: 10s
