@@ -1078,6 +1078,36 @@ async fn invalidated_slot_requires_resync_stopped_and_streaming() {
             .execute("SELECT pg_reload_conf()", &[])
             .await
             .unwrap();
+        // The reload is asynchronous, and a value pinned on the server command line
+        // silently wins over ALTER SYSTEM. Wait until the setting is really in effect.
+        let want = v.unwrap_or("");
+        for _ in 0..50 {
+            let row = job
+                .src
+                .query_one(
+                    "SELECT setting, source FROM pg_settings WHERE name = 'max_slot_wal_keep_size'",
+                    &[],
+                )
+                .await
+                .unwrap();
+            let (setting, source): (String, String) = (row.get(0), row.get(1));
+            let ok = match v {
+                Some(_) => source == "configuration file" && format_mb(&setting) == want,
+                None => source != "command line",
+            };
+            if ok {
+                return;
+            }
+            assert_ne!(
+                source, "command line",
+                "max_slot_wal_keep_size is pinned on the server command line; ALTER SYSTEM cannot change it"
+            );
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("max_slot_wal_keep_size did not become {want:?} after reload");
+    }
+    fn format_mb(setting_mb: &str) -> String {
+        format!("{setting_mb}MB")
     }
     keep_size(&job, None).await;
     let mut p = job.spawn(&["bootstrap"]);

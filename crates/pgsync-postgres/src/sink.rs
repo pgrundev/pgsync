@@ -840,7 +840,13 @@ pub async fn upsert_runtime(client: &PgClient, r: &RuntimeRow<'_>) -> Result<()>
                 &(r.started_at_unix as f64),
                 &r.stopped,
                 &m.state.as_str(),
-                &format!("{:?}", m.connection).to_lowercase(),
+                // The final row is written while the engine is still closing its stream;
+                // a stopped process is disconnected regardless of that race.
+                &if r.stopped {
+                    "disconnected".to_owned()
+                } else {
+                    format!("{:?}", m.connection).to_lowercase()
+                },
                 &r.source_version,
                 &PgLsn::from(m.last_received_lsn.0),
                 &PgLsn::from(m.server_wal_end.0),

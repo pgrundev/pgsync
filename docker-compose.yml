@@ -22,8 +22,6 @@ services:
       - -c
       - max_wal_senders=16
       - -c
-      - max_slot_wal_keep_size=1GB
-      - -c
       - wal_sender_timeout=30s
       - -c
       - log_min_messages=warning
