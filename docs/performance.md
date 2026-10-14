@@ -140,17 +140,46 @@ binary and library pages once per process; the incremental figure above is what 
 actually pays. The two happen to be close on macOS because the shared part of a pgsync
 process is small (~3 MB).
 
-## Soak
+## Soak (`soak-20261013T230339Z`, PG 18 pair, commit `04b614f`)
 
-Pending: filled in from the 4-hour run (`scripts/soak.sh`, PG 18 pair) when it completes.
-A first attempt (22:50 UTC) was aborted after 10 minutes: a 10 M-row benchmark started on
-the other cluster pair at the same time filled the development disk (another session on
-the machine was consuming space concurrently), the soak's target reported `No space left on
-device` and pgsync went to `ERROR` and restarted in a loop — the correct behaviour for a
-resource error, but a run tainted by the operator. The soak was restarted alone at 23:03
-UTC with a free-disk guard (`MIN_FREE_MB`, clean stop and hashes if space runs out). A 200-second smoke run with a compressed schedule (two
-SIGKILLs, one SIGTERM, one walsender termination, bursts, idle and large transactions)
-converged with identical hashes and 0 unexpected exits (`soak-20261013T224007Z`).
+`DURATION_SECS=14400 ROWS=400000 ./scripts/soak.sh` — planned for 4 hours, **ran 68
+minutes (4,100 s)**: the script's free-disk guard stopped it cleanly when free space on the
+development machine fell to 1.1 GB (another session on the same machine was writing
+several GB to its own scratch space during the run; pgsync's own footprint on disk was the
+0.3 GB dataset plus its growth). A longer run was not feasible on this machine in this
+session; the 68 minutes are reported as such, not as a 4-hour pass.
+
+Workload: 2 × 400 k rows; four writers in 20-minute cycles of 12 min steady (20 updates +
+30 inserts + 5 deletes per transaction, as fast as `psql` spawns), 2 min bulk-update bursts,
+2 min idle, 2 min with one 200 k-row transaction; sampled every 10 s.
+
+Interruptions, all from the fixed schedule, all recovered without operator action:
+
+| Minute | Event | Outcome |
+|---|---|---|
+| 7, 23, 41, 67 | SIGKILL pgsync, `run` 2 s later | resumed from the checkpoint |
+| 15, 53 | SIGTERM pgsync, `run` 2 s later | finished the transaction in flight, exit 0, resumed |
+| 31 | `pg_terminate_backend` on the walsender | one reconnect, resumed |
+| — | unexpected exits | 0 |
+
+| Metric | Value |
+|---|---|
+| Transactions applied | 113,726 (source hashes: `items` 400,000 rows, `ledger` 3,905,025 rows) |
+| Contents at the end | **identical** on both tables (chunked MD5 over every row and column) |
+| Drain after writers stopped | 0 s (already converged) |
+| RSS average / peak | 13.5 MB / 59.0 MB |
+| RSS per quarter (avg / peak) | 14.4 / 59.0 · 14.0 / 42.4 · 11.5 / 31.7 · 14.3 / 51.9 MB |
+| RSS first 10 min vs last 10 min | 11.9 MB vs 11.1 MB — **no growth** |
+| CPU | 4.3 % of one core average |
+| Apply lag | p50 0.02 MB, p99 4.1 MB, max 16.0 MB; never above 64 MB |
+| Retained WAL (slot) max | 105.7 MB (during the 200 k-row transactions and right after kills) |
+| Connections | 2 on the source (walsender + monitor), 2 on the target (apply + heartbeat), constant; no leak across 7 restarts |
+
+The peaks (up to 59 MB) coincide with the 200 k-row transactions: the reader→applier
+channel fills to its 16 MiB budget and the applier holds a 4 MiB batch, on top of the
+~12 MB baseline and allocator slack; between them RSS returns to 11–14 MB. The 40-minute
+Beta 1 soak showed 14.6–14.9 MB; this run is consistent with it under a harder workload
+with interruptions.
 
 ## Not measured
 
