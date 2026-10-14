@@ -1,11 +1,16 @@
 [package]
-name = "pgsync-cli"
-description = "PGSync command line interface"
+name = "pgsync"
+description = "Memory-bounded PostgreSQL logical replication: consistent snapshot plus pgoutput CDC into another PostgreSQL"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+include = ["src/**/*.rs", "Cargo.toml"]
 
 [[bin]]
 name = "pgsync"

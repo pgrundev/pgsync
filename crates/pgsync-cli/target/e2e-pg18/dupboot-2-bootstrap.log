@@ -1,2 +1,0 @@
-[2m2026-10-13T21:52:02.177470Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-dupboot [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
-[2m2026-10-13T21:52:02.624927Z[0m [31mERROR[0m [config] job "e2e-dupboot" already exists on the target in state STREAMING. Use `pgsync run` to resume, `pgsync bootstrap --restart-snapshot` to discard the incomplete copy and start over, or `pgsync cleanup` to remove it.

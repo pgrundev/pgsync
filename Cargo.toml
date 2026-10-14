@@ -11,12 +11,14 @@ version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
-repository = "https://github.com/pgrun/pgsync"
-publish = false
+repository = "https://github.com/pgrundev/pgsync"
+homepage = "https://github.com/pgrundev/pgsync"
+keywords = ["postgres", "postgresql", "replication", "cdc", "logical-replication"]
+categories = ["database", "command-line-utilities"]
 
 [workspace.dependencies]
-pgsync-core = { path = "crates/pgsync-core" }
-pgsync-postgres = { path = "crates/pgsync-postgres" }
+pgsync-core = { path = "crates/pgsync-core", version = "0.1.1" }
+pgsync-postgres = { path = "crates/pgsync-postgres", version = "0.1.1" }
 
 anyhow = "1.0.104"
 bytes = "1.12.1"
@@ -49,3 +51,11 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 debug = 1
 lto = "thin"
 codegen-units = 4
+
+# Distribution builds: no debug info, stripped. `cargo build --profile dist`.
+[profile.dist]
+inherits = "release"
+debug = false
+strip = true
+lto = "fat"
+codegen-units = 1

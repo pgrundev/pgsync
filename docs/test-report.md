@@ -29,8 +29,8 @@ export PGSYNC_E2E=1 PGSYNC_E2E_DIR=$PWD/target/e2e-pg18 \
   PGSYNC_E2E_PG_BIN=/opt/homebrew/opt/postgresql@18/bin PGSYNC_E2E_CRASH_ROUNDS=15
 PGSYNC_TEST_SOURCE_URL=$PGSYNC_E2E_SOURCE_URL PGSYNC_TEST_SOURCE_ADMIN_URL=$PGSYNC_E2E_SOURCE_ADMIN_URL \
   cargo test -p pgsync-postgres --test live_replication
-cargo test -p pgsync-cli --test e2e -- --test-threads=1
-cargo test -p pgsync-cli --test e2e -- --test-threads=1 --ignored
+cargo test -p pgsync --test e2e -- --test-threads=1
+cargo test -p pgsync --test e2e -- --test-threads=1 --ignored
 
 # TLS lab (PostgreSQL 18, ssl=on, hostssl + scram on the LAN address)
 PG_BIN=/opt/homebrew/opt/postgresql@18/bin ./scripts/tls-lab.sh start
@@ -40,7 +40,7 @@ PGSYNC_TLS_LAB=1 PGSYNC_TLS_LAB_DIR=$PWD/target/tls-lab PGSYNC_TLS_PG_BIN=/opt/h
   cargo test -p pgsync-postgres --test tls_lab -- --test-threads=1
 PGSYNC_TEST_SOURCE_URL=$PGSYNC_E2E_SOURCE_URL PGSYNC_TEST_SOURCE_ADMIN_URL=$PGSYNC_E2E_SOURCE_ADMIN_URL \
   cargo test -p pgsync-postgres --test live_replication          # over TLS
-PGSYNC_E2E=1 PGSYNC_E2E_DIR=$PWD/target/e2e-tls cargo test -p pgsync-cli --test e2e -- --test-threads=1   # over TLS
+PGSYNC_E2E=1 PGSYNC_E2E_DIR=$PWD/target/e2e-tls cargo test -p pgsync --test e2e -- --test-threads=1   # over TLS
 
 # Benchmarks and soak: see docs/performance.md
 ```

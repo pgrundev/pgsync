@@ -1,0 +1,84 @@
+name: release
+
+# A full-semver tag (v0.1.1) builds the binaries for four platforms and attaches them,
+# with checksums.txt, to the GitHub Release for that tag (created if missing).
+# Re-run for an existing tag with "Run workflow" and the tag name.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build, e.g. v0.1.1"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    target: x86_64-unknown-linux-musl,  asset: linux_amd64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, asset: linux_arm64 }
+          - { os: macos-latest,     target: aarch64-apple-darwin,       asset: darwin_arm64 }
+          - { os: macos-latest,     target: x86_64-apple-darwin,        asset: darwin_amd64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: musl toolchain
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: build
+        run: cargo build --locked --profile dist --target ${{ matrix.target }} -p pgsync
+      - name: package
+        shell: bash
+        run: |
+          v="${TAG#v}"
+          name="pgsync_${v}_${{ matrix.asset }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/dist/pgsync" README.md LICENSE "dist/$name/"
+          cp -r examples "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          "dist/$name/pgsync" --version || true   # cross-built x86_64 macOS runs under Rosetta
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*.tar.gz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: checksums
+        run: cd dist && sha256sum *.tar.gz > checksums.txt && cat checksums.txt
+      - name: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes="docs/releases/${TAG}.md"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "pgsync ${TAG}" --prerelease \
+              $( [ -f "$notes" ] && echo --notes-file "$notes" || echo --generate-notes )
+          fi
+          # checksums.txt covers only the assets built here; a locally uploaded asset
+          # for the same platform is replaced by the CI-built one.
+          gh release upload "$TAG" dist/*.tar.gz dist/checksums.txt --clobber

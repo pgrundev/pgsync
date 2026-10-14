@@ -12,6 +12,8 @@
   <a href="https://github.com/pgrundev/pgsync/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/pgrundev/pgsync/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="PostgreSQL 16–18" src="https://img.shields.io/badge/postgres-16%E2%80%9318-336791">
+  <a href="https://crates.io/crates/pgsync"><img alt="crates.io" src="https://img.shields.io/crates/v/pgsync"></a>
+  <a href="https://github.com/pgrundev/pgsync/releases"><img alt="Release" src="https://img.shields.io/github/v/release/pgrundev/pgsync?include_prereleases"></a>
   <img alt="Rust stable" src="https://img.shields.io/badge/rust-stable-orange">
 </p>
 
@@ -224,7 +226,30 @@ Job states, as stored in `pgsync.job` and shown by `status`: `INITIALIZING` →
 
 ## Install
 
-No release binaries yet — build from source with Rust stable:
+**Homebrew** (macOS and Linux; builds from source):
+
+```sh
+brew install pgrundev/tap/pgsync
+```
+
+**Cargo** (crates.io):
+
+```sh
+cargo install pgsync
+```
+
+**Binary** — downloads the release archive for your platform and verifies it against
+`checksums.txt`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/pgrundev/pgsync/main/scripts/install.sh | sh
+```
+
+Archives for every release are on the
+[releases page](https://github.com/pgrundev/pgsync/releases). `bootstrap` also needs
+`pg_dump` (PostgreSQL client tools) on `PATH`.
+
+**From source**:
 
 ```sh
 git clone https://github.com/pgrundev/pgsync

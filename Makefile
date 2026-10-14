@@ -28,11 +28,11 @@ down:
 ## Live protocol test + fast end-to-end scenarios (about 6 minutes).
 e2e: up
 	PGSYNC_TEST_SOURCE_URL=$(SOURCE_URL) cargo test -p pgsync-postgres --test live_replication
-	PGSYNC_E2E=1 PGSYNC_E2E_DIR=$(E2E_DIR) cargo test -p pgsync-cli --test e2e -- --test-threads=1
+	PGSYNC_E2E=1 PGSYNC_E2E_DIR=$(E2E_DIR) cargo test -p pgsync --test e2e -- --test-threads=1
 
 ## Disruptive scenarios: container pause/restart, random crash loop, large table.
 e2e-slow: up
-	PGSYNC_E2E=1 PGSYNC_E2E_DIR=$(E2E_DIR) cargo test -p pgsync-cli --test e2e -- --test-threads=1 --ignored
+	PGSYNC_E2E=1 PGSYNC_E2E_DIR=$(E2E_DIR) cargo test -p pgsync --test e2e -- --test-threads=1 --ignored
 
 check bootstrap run status:
 	PGSYNC_SOURCE_URL=$(SOURCE_URL) PGSYNC_TARGET_URL=$(TARGET_URL) cargo run -q --release -- --config examples/pgsync.yaml $@

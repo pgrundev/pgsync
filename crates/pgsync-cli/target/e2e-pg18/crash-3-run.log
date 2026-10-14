@@ -1,5 +1,0 @@
-[2m2026-10-13T21:52:09.413817Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-crash [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
-[2m2026-10-13T21:52:09.600436Z[0m [32m INFO[0m START_REPLICATION accepted [3mslot[0m[2m=[0mslot_crash [3mfrom[0m[2m=[0m0/1D19E00 [3mconfirmed_flush[0m[2m=[0mSome(Lsn(0/1D19B80))
-[2m2026-10-13T21:52:09.600484Z[0m [32m INFO[0m replication stream opened [3mfrom[0m[2m=[0m0/1D19E00 [3macked[0m[2m=[0m0/1D19E00 [3mserver_wal_end[0m[2m=[0m0/1D1D678 [3mstate[0m[2m=[0mSTREAMING
-[2m2026-10-13T21:52:11.268777Z[0m [32m INFO[0m shutdown requested; finishing the current transaction
-[2m2026-10-13T21:52:11.269010Z[0m [32m INFO[0m replication stopped cleanly [3mcommitted[0m[2m=[0m0/1D38958 [3macked[0m[2m=[0m0/1D38958

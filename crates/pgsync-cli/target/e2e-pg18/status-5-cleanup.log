@@ -1,2 +1,0 @@
-[2m2026-10-13T21:53:01.783036Z[0m [32m INFO[0m pgsync 0.1.0 [3mjob[0m[2m=[0me2e-status [3msource[0m[2m=[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app
-[2m2026-10-13T21:53:01.783134Z[0m [31mERROR[0m cleanup drops the replication slot owned by job "e2e-status" on the source and deletes its metadata on the target; re-run with --yes to confirm

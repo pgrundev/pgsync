@@ -1,5 +1,5 @@
 //! End-to-end scenarios against Docker Compose. Run with:
-//!   PGSYNC_E2E=1 cargo test -p pgsync-cli --test e2e -- --test-threads=1
+//!   PGSYNC_E2E=1 cargo test -p pgsync --test e2e -- --test-threads=1
 //! Scenarios that pause containers or take minutes are `#[ignore]`d; run them with
 //! `--ignored` (see Makefile `e2e-slow`).
 

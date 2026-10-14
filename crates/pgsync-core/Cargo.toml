@@ -1,11 +1,16 @@
 [package]
 name = "pgsync-core"
-description = "PGSync core: lifecycle, transaction model, LSN/checkpoint contracts, backpressure"
+description = "Core of pgsync: job lifecycle, transaction model, LSN and checkpoint contracts, bounded backpressure"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "../../README.md"
+include = ["src/**/*.rs", "Cargo.toml"]
 
 [dependencies]
 bytes.workspace = true

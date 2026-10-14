@@ -45,10 +45,10 @@ jobs:
       - name: Live protocol test
         run: PGSYNC_TEST_SOURCE_URL=postgres://pgsync:pgsync@localhost:5433/app cargo test -p pgsync-postgres --test live_replication
       - name: End-to-end scenarios
-        run: PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e cargo test -p pgsync-cli --test e2e -- --test-threads=1
+        run: PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e cargo test -p pgsync --test e2e -- --test-threads=1
       - name: Disruptive scenarios
         if: matrix.pg == '18'
-        run: PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e PGSYNC_E2E_CRASH_ROUNDS=8 PGSYNC_E2E_LARGE_ROWS=100000 cargo test -p pgsync-cli --test e2e -- --test-threads=1 --ignored
+        run: PGSYNC_E2E=1 PGSYNC_E2E_DIR=target/e2e PGSYNC_E2E_CRASH_ROUNDS=8 PGSYNC_E2E_LARGE_ROWS=100000 cargo test -p pgsync --test e2e -- --test-threads=1 --ignored
       - name: Logs on failure
         if: failure()
         run: |

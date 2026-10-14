@@ -1,3 +1,0 @@
-replication slot "slot_noslot" does not exist
-deleted job "e2e-noslot" metadata from the target (data tables kept)
-[0mpostgres://pgsync@localhost:5533/app [3mtarget[0m[2m=[0mpostgres://postgres@localhost:5534/app

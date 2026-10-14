@@ -1,4 +1,5 @@
 /target
+target/
 **/*.rs.bk
 /docker/certs/*.key
 /docker/certs/*.crt

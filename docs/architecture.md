@@ -23,7 +23,7 @@ rewrite. Research inputs: [`research/pgstream-audit.md`](research/pgstream-audit
 | Snapshot export / import, streaming `COPY` | **Implemented** on top of `tokio-postgres` `copy_out` / `copy_in`. |
 | Schema bootstrap | **Reused tool:** `pg_dump --schema-only` for the selected tables; PGSync executes the SQL. Optional `schema.mode: existing` skips it. |
 | Transaction model, checkpoint contract, budgets, backpressure, retry, lifecycle | **Implemented** in `pgsync-core`. |
-| CLI, config loading, logging | **Implemented** in `pgsync-cli` with `clap`, `serde_yaml_ng`, `tracing`. |
+| CLI, config loading, logging | **Implemented** in `pgsync` (crates/pgsync-cli) with `clap`, `serde_yaml_ng`, `tracing`. |
 
 No code is copied from pgstream (Go) or any Rust fork. Attribution is therefore not required;
 the Apache-2.0 licence of this repository applies.
