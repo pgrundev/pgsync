@@ -39,16 +39,59 @@
 
 ## Quickstart
 
-Two PostgreSQL 18 containers, a publication, and a 90-second first run:
+**1. Install**
 
 ```sh
+brew install pgrundev/tap/pgsync      # macOS / Linux
+cargo install pgsync                  # or with Rust
+```
+
+**2. Prepare the source** (once, as an admin; needs `wal_level = logical`)
+
+```sql
+CREATE ROLE pgsync WITH LOGIN REPLICATION PASSWORD '…';
+GRANT SELECT ON public.users, public.orders TO pgsync;
+CREATE PUBLICATION pgsync_pub FOR TABLE public.users, public.orders;
+```
+
+**3. Configure** — `pgsync.yaml` (full annotated version: [`examples/pgsync.yaml`](examples/pgsync.yaml))
+
+```yaml
+job:    { id: my-job }
+source: { url_env: PGSYNC_SOURCE_URL, publication: pgsync_pub, slot: pgsync_slot }
+target: { url_env: PGSYNC_TARGET_URL }
+replication:
+  tables: [public.users, public.orders]
+```
+
+```sh
+export PGSYNC_SOURCE_URL='postgres://pgsync:…@source-host:5432/app?sslmode=require'
+export PGSYNC_TARGET_URL='postgres://writer:…@target-host:5432/app?sslmode=require'
+```
+
+**4. Run**
+
+```sh
+pgsync check        # 22 prerequisite checks; changes nothing
+pgsync bootstrap    # create slot, copy a consistent snapshot, then stream changes
+pgsync run          # after a stop or crash: resume from the checkpoint
+pgsync status       # state, lag, retained WAL   (--json for scripts)
+pgsync cleanup --yes   # drop the slot when you are done
+```
+
+`pgsync` reads `pgsync.yaml` from the current directory (or `--config <path>`). Ctrl-C
+finishes the transaction in flight and exits cleanly.
+
+### Try it locally in 90 seconds
+
+Two PostgreSQL 18 containers with a demo publication already set up:
+
+```sh
+git clone https://github.com/pgrundev/pgsync && cd pgsync
 docker compose up -d --wait                       # source :5433 (wal_level=logical), target :5434
 export PGSYNC_SOURCE_URL='postgres://pgsync:pgsync@localhost:5433/app'
 export PGSYNC_TARGET_URL='postgres://postgres:postgres@localhost:5434/app'
-
-cargo build --release
-./target/release/pgsync --config examples/pgsync.yaml check       # 22 checks, changes nothing
-./target/release/pgsync --config examples/pgsync.yaml bootstrap   # slot + snapshot + copy, then streams
+pgsync --config examples/pgsync.yaml bootstrap
 ```
 
 In a second shell, write to the source and read it back from the target:
@@ -59,17 +102,8 @@ psql postgres://postgres:postgres@localhost:5433/app \
 psql "$PGSYNC_TARGET_URL" -c "SELECT id, email, full_name FROM users WHERE email = 'demo@example.test'"
 ```
 
-Stop pgsync with Ctrl-C (it finishes the transaction in flight), make more changes, then
-resume from the checkpoint it left in the target:
-
-```sh
-./target/release/pgsync --config examples/pgsync.yaml run
-./target/release/pgsync --config examples/pgsync.yaml status
-```
-
 Connection URLs come from the environment variables named in the config — never from the
 file, never from the command line — so they stay out of `ps`, logs, and git.
-`make check bootstrap run status cleanup` wrap the same commands.
 
 ## Why pgsync
 
